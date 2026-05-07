@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>🌸 生活规划本</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#FFF8EE;--card:#FFFFFF;--accent:#FFD166;--accent2:#FFC23A;
+  --pink:#FFDCE8;--pink2:#FFB3C6;--pink3:#FF6A9F;
+  --green:#C8F5DC;--green2:#96E6B3;--blue:#DCF0FF;--blue2:#74B9FF;
+  --lav:#EDE0FF;--text:#5A4040;--textg:#9A8878;--textl:#C0B0A8;
+  --urgent:#FF6B6B;--imprt:#FFA07A;--normal:#74B9FF;
+  --border:#F0E0D0;--toolbar:#FFF0DC;
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh;display:flex;flex-direction:column}
+/* Login */
+#login{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px;gap:16px;background:var(--bg)}
+#login h1{font-size:24px;color:var(--text)}
+#login p{color:var(--textg);font-size:13px;text-align:center}
+.inp{width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:12px;background:var(--card);font-size:15px;color:var(--text);outline:none}
+.inp:focus{border-color:var(--accent2)}
+.btn{width:100%;padding:14px;border:none;border-radius:12px;background:var(--accent);color:var(--text);font-size:16px;font-weight:700;cursor:pointer}
+.btn:active{background:var(--accent2)}
+/* App shell */
+#app{display:none;flex-direction:column;height:100vh}
+header{background:var(--toolbar);padding:14px 16px 10px;font-size:18px;font-weight:700;color:var(--text);flex-shrink:0;border-bottom:1px solid var(--border)}
+main{flex:1;overflow-y:auto;padding:12px 12px 80px}
+/* Bottom nav */
+nav{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--border);display:flex;height:60px;z-index:100}
+nav button{flex:1;border:none;background:none;color:var(--textg);font-size:11px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 0}
+nav button span.ico{font-size:20px}
+nav button.active{color:var(--text);font-weight:700}
+nav button.active span.ico{transform:scale(1.1)}
+/* Cards */
+.card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:10px;border:1px solid var(--border)}
+.card-title{font-size:15px;font-weight:700;margin-bottom:10px;color:var(--text)}
+/* Tabs */
+.tabs{display:flex;gap:6px;margin-bottom:12px}
+.tab{flex:1;padding:8px 4px;border:none;border-radius:10px;background:var(--bg);color:var(--textg);font-size:13px;font-weight:600;cursor:pointer}
+.tab.active{background:var(--accent);color:var(--text)}
+/* Date nav */
+.date-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.date-nav button{border:none;background:var(--pink);border-radius:10px;padding:8px 14px;font-size:16px;cursor:pointer;color:var(--text)}
+.date-nav .today-btn{background:var(--accent);font-size:13px;font-weight:700;padding:8px 12px;border-radius:10px;border:none;cursor:pointer;color:var(--text)}
+.date-lbl{font-size:16px;font-weight:700;color:var(--text);text-align:center;flex:1}
+/* Todo items */
+.todo-item{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:12px;margin-bottom:6px}
+.todo-item .chk{font-size:20px;cursor:pointer;flex-shrink:0;line-height:1.3}
+.todo-item .body{flex:1}
+.todo-item .name{font-size:14px;font-weight:600}
+.todo-item .name.done{text-decoration:line-through;color:var(--textg)}
+.todo-item .desc{font-size:12px;color:var(--textg);margin-top:2px}
+.badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;margin-top:4px}
+.todo-item .del-btn{border:none;background:none;color:var(--textl);font-size:18px;cursor:pointer;flex-shrink:0;padding:0 4px}
+/* Priority colors */
+.pri-u{background:#FFF0F0}.pri-i{background:#FFF5EE}.pri-n{background:#F0F5FF}
+.strip-u{background:var(--urgent)}.strip-i{background:var(--imprt)}.strip-n{background:var(--normal)}
+/* FAB */
+.fab{position:fixed;right:18px;bottom:72px;width:52px;height:52px;border-radius:50%;border:none;background:var(--accent);color:var(--text);font-size:28px;box-shadow:0 4px 12px rgba(0,0,0,.15);cursor:pointer;z-index:99;display:flex;align-items:center;justify-content:center}
+.fab:active{background:var(--accent2)}
+/* Bottom sheet */
+.sheet-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200}
+.sheet-overlay.open{display:block}
+.sheet{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-radius:24px 24px 0 0;padding:20px 20px 40px;z-index:201;transform:translateY(100%);transition:transform .3s ease}
+.sheet-overlay.open .sheet{transform:translateY(0)}
+.sheet h2{font-size:17px;font-weight:700;margin-bottom:16px;color:var(--text)}
+.sheet .close{float:right;background:none;border:none;font-size:22px;cursor:pointer;color:var(--textg)}
+.label{font-size:12px;font-weight:700;color:var(--textg);margin-bottom:4px}
+.field{margin-bottom:12px}
+textarea{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:12px;background:var(--bg);font-size:14px;color:var(--text);resize:none;outline:none;font-family:inherit}
+textarea:focus{border-color:var(--accent2)}
+/* Pri selector */
+.pri-sel{display:flex;gap:6px;margin-bottom:12px}
+.pri-btn{flex:1;padding:9px 4px;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;background:#FFE0E0;color:var(--urgent)}
+.pri-btn.i{background:#FFE8D8;color:var(--imprt)}
+.pri-btn.n{background:#E0EEFF;color:var(--normal)}
+.pri-btn.sel{opacity:1;filter:brightness(.9)}
+.pri-btn:not(.sel){opacity:.5}
+/* Countdown card */
+.cd-card{background:var(--pink);border-radius:14px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+.cd-card .cd-name{font-size:16px;font-weight:700}
+.cd-card .cd-date{font-size:12px;color:var(--textg);margin-top:2px}
+.cd-card .cd-days{font-size:20px;font-weight:700;color:var(--pink3);text-align:right}
+.cd-card .cd-sub{font-size:11px;color:var(--textg)}
+/* Weight */
+.wt-inputs{display:flex;gap:10px;margin-bottom:12px}
+.wt-inp-wrap{flex:1;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:10px;display:flex;flex-direction:column;align-items:center}
+.wt-inp-wrap label{font-size:11px;color:var(--textg);margin-bottom:4px}
+.wt-inp-wrap input{width:80px;text-align:center;border:none;background:none;font-size:22px;font-weight:700;color:var(--text);outline:none}
+.wt-add-btn{width:100%;padding:13px;border:none;border-radius:12px;background:var(--green);color:var(--text);font-size:15px;font-weight:700;cursor:pointer;margin-bottom:12px}
+.wt-add-btn:active{background:var(--green2)}
+canvas{width:100%;border-radius:10px;background:var(--bg);display:block}
+/* Thoughts */
+.thought-card{background:var(--pink);border-radius:14px;padding:12px 14px;margin-bottom:8px}
+.thought-card .th-top{display:flex;justify-content:space-between;margin-bottom:6px}
+.thought-card .th-created{font-size:10px;color:var(--textg)}
+.thought-card .th-period{font-size:12px;font-weight:700;color:var(--pink3)}
+.thought-card .th-content{font-size:13px;color:var(--text);line-height:1.5}
+/* Empty state */
+.empty{text-align:center;color:var(--textl);padding:40px 20px;font-size:14px}
+/* Period inputs */
+.period-row{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.period-row label{font-size:12px;color:var(--textg)}
+.period-row input{width:60px;padding:8px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);text-align:center;font-size:14px;color:var(--text);outline:none}
+.sub-btn{flex:1;padding:9px 6px;border:none;border-radius:10px;background:var(--bg);color:var(--textg);font-size:12px;font-weight:700;cursor:pointer}
+.sub-btn.active{background:var(--accent);color:var(--text)}
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login">
+  <h1>🌸 生活规划本</h1>
+  <p>输入你的后端地址和访问密钥</p>
+  <input class="inp" id="api-url" placeholder="https://your-app.railway.app" type="url">
+  <input class="inp" id="api-token" placeholder="访问密钥 (API Token)" type="password">
+  <button class="btn" onclick="doLogin()">进入</button>
+  <p id="login-err" style="color:var(--urgent);display:none">连接失败，请检查地址和密钥</p>
+</div>
+
+<!-- Main app -->
+<div id="app">
+  <header>🌸 生活规划本</header>
+  <main id="main-content"></main>
+  <nav>
+    <button onclick="showTab('tasks')" id="nav-tasks" class="active">
+      <span class="ico">📋</span>日程
+    </button>
+    <button onclick="showTab('countdown')" id="nav-countdown">
+      <span class="ico">⏰</span>倒数
+    </button>
+    <button onclick="showTab('weight')" id="nav-weight">
+      <span class="ico">⚖️</span>体重
+    </button>
+    <button onclick="showTab('thoughts')" id="nav-thoughts">
+      <span class="ico">💭</span>想法
+    </button>
+  </nav>
+</div>
+
+<!-- Add sheet (shared) -->
+<div class="sheet-overlay" id="overlay" onclick="closeSheet(event)">
+  <div class="sheet" id="sheet">
+    <h2 id="sheet-title">添加 <button class="close" onclick="closeSheet()">×</button></h2>
+    <div id="sheet-body"></div>
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────
+let BASE = '', TOKEN = '';
+
+function doLogin() {
+  BASE = document.getElementById('api-url').value.trim().replace(/\/$/, '');
+  TOKEN = document.getElementById('api-token').value.trim();
+  if (!BASE || !TOKEN) return;
+  api('GET', '/countdowns').then(() => {
+    localStorage.setItem('lp_base', BASE);
+    localStorage.setItem('lp_token', TOKEN);
+    document.getElementById('login').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    showTab('tasks');
+  }).catch(() => {
+    document.getElementById('login-err').style.display = 'block';
+  });
+}
+
+// Auto-login
+(function() {
+  const b = localStorage.getItem('lp_base');
+  const t = localStorage.getItem('lp_token');
+  if (b && t) {
+    BASE = b; TOKEN = t;
+    document.getElementById('api-url').value = b;
+    document.getElementById('api-token').value = t;
+    doLogin();
+  }
+})();
+
+// ── API ────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = {
+    method,
+    headers: { 'x-api-token': TOKEN, 'Content-Type': 'application/json' }
+  };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const r = await fetch(BASE + path, opts);
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
+// ── State ─────────────────────────────────────────────────────────
+let selDate = todayStr();
+let currentTab = 'tasks';
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function fmtDate(s) {
+  const d = new Date(s + 'T00:00:00');
+  const wd = ['日','一','二','三','四','五','六'];
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 星期${wd[d.getDay()]}`;
+}
+
+function addDays(s, n) {
+  const d = new Date(s + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// ── Tab routing ───────────────────────────────────────────────────
+function showTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('nav-' + tab).classList.add('active');
+  const fab = document.getElementById('fab');
+  if (fab) fab.remove();
+  if (tab === 'tasks') renderTasks();
+  else if (tab === 'countdown') renderCountdown();
+  else if (tab === 'weight') renderWeight();
+  else if (tab === 'thoughts') renderThoughts();
+}
+
+// ── TASKS ─────────────────────────────────────────────────────────
+const PRIO = {
+  u: { label: '🔴 紧急', bg: '#FFF0F0', strip: '#FF6B6B', badge: '#FFE0E0', c: '#FF6B6B' },
+  i: { label: '🟠 重要', bg: '#FFF5EE', strip: '#FFA07A', badge: '#FFE8D8', c: '#FFA07A' },
+  n: { label: '🔵 不重要', bg: '#F0F5FF', strip: '#74B9FF', badge: '#E0EEFF', c: '#74B9FF' },
+};
+
+async function renderTasks() {
+  const mc = document.getElementById('main-content');
+  mc.innerHTML = `<div class="date-nav">
+    <button onclick="changeDate(-1)">‹</button>
+    <div>
+      <div class="date-lbl" id="date-lbl"></div>
+      <div style="text-align:center;margin-top:2px">
+        <button class="today-btn" onclick="goToday()">今天</button>
+      </div>
+    </div>
+    <button onclick="changeDate(1)">›</button>
+  </div>
+  <div id="task-list"></div>`;
+  document.getElementById('date-lbl').textContent = fmtDate(selDate);
+  addFab(() => openAddTask());
+  await loadTasks();
+}
+
+async function loadTasks() {
+  const list = document.getElementById('task-list');
+  if (!list) return;
+  try {
+    const tasks = await api('GET', `/tasks/${selDate}`);
+    if (!tasks.length) {
+      list.innerHTML = '<div class="empty">🌸 今天没有待办，好好放松~</div>';
+      return;
+    }
+    list.innerHTML = tasks.map(t => taskHTML(t)).join('');
+  } catch(e) { list.innerHTML = '<div class="empty">加载失败</div>'; }
+}
+
+function taskHTML(t) {
+  const p = PRIO[t.pri] || PRIO.n;
+  return `<div class="todo-item" style="background:${p.bg}" id="task-${t.id}">
+    <div style="width:4px;border-radius:4px;background:${p.strip};align-self:stretch;flex-shrink:0"></div>
+    <span class="chk" onclick="toggleTask('${t.id}')">${t.done ? '✓' : '○'}</span>
+    <div class="body">
+      <div class="name ${t.done?'done':''}">${esc(t.name)}</div>
+      ${t.desc ? `<div class="desc">${esc(t.desc)}</div>` : ''}
+      <span class="badge" style="background:${p.badge};color:${p.c}">${p.label}</span>
+    </div>
+    <button class="del-btn" onclick="delTask('${t.id}')">🗑</button>
+  </div>`;
+}
+
+async function toggleTask(tid) {
+  await api('PATCH', `/tasks/${selDate}/${tid}/toggle`);
+  await loadTasks();
+}
+
+async function delTask(tid) {
+  if (!confirm('删除这条待办？')) return;
+  await api('DELETE', `/tasks/${selDate}/${tid}`);
+  await loadTasks();
+}
+
+function changeDate(n) {
+  selDate = addDays(selDate, n);
+  document.getElementById('date-lbl').textContent = fmtDate(selDate);
+  loadTasks();
+}
+
+function goToday() {
+  selDate = todayStr();
+  document.getElementById('date-lbl').textContent = fmtDate(selDate);
+  loadTasks();
+}
+
+function openAddTask() {
+  let pri = 'n';
+  document.getElementById('sheet-title').innerHTML =
+    '添加日程 <button class="close" onclick="closeSheet()">×</button>';
+  document.getElementById('sheet-body').innerHTML = `
+    <div class="field"><div class="label">日期</div>
+      <input class="inp" id="f-date" type="date" value="${selDate}"></div>
+    <div class="field"><div class="label">事件名称</div>
+      <input class="inp" id="f-name" placeholder="要做什么？"></div>
+    <div class="field"><div class="label">简介（可选）</div>
+      <textarea id="f-desc" rows="2" placeholder="备注..."></textarea></div>
+    <div class="label">优先级</div>
+    <div class="pri-sel">
+      <button class="pri-btn sel" id="pb-u" onclick="selPri('u')">🔴 紧急</button>
+      <button class="pri-btn i" id="pb-i" onclick="selPri('i')">🟠 重要</button>
+      <button class="pri-btn n sel" id="pb-n" onclick="selPri('n')">🔵 不重要</button>
+    </div>
+    <button class="btn" onclick="submitTask()">添加日程 🌸</button>`;
+  selPriVar = 'n'; selPri('n');
+  openSheet();
+}
+
+let selPriVar = 'n';
+function selPri(p) {
+  selPriVar = p;
+  ['u','i','n'].forEach(x => {
+    const b = document.getElementById('pb-'+x);
+    if (b) b.classList.toggle('sel', x === p);
+  });
+}
+
+async function submitTask() {
+  const dk = document.getElementById('f-date')?.value || selDate;
+  const name = document.getElementById('f-name')?.value.trim();
+  const desc = document.getElementById('f-desc')?.value.trim() || '';
+  if (!name) { alert('请输入事件名称'); return; }
+  await api('POST', `/tasks/${dk}`, { name, desc, pri: selPriVar });
+  selDate = dk;
+  closeSheet();
+  await loadTasks();
+}
+
+// ── COUNTDOWN ─────────────────────────────────────────────────────
+async function renderCountdown() {
+  const mc = document.getElementById('main-content');
+  mc.innerHTML = '<div id="cd-list"></div>';
+  addFab(() => openAddCd());
+  await loadCountdowns();
+}
+
+function cdDays(dateStr, rep) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const orig = new Date(dateStr + 'T00:00:00');
+  let target = new Date(orig);
+  if (rep === 'yearly') {
+    target = new Date(today.getFullYear(), orig.getMonth(), orig.getDate());
+    if (target < today) target.setFullYear(target.getFullYear() + 1);
+  } else if (rep === 'monthly') {
+    target = new Date(today.getFullYear(), today.getMonth(), orig.getDate());
+    if (target < today) target.setMonth(target.getMonth() + 1);
+  } else if (rep === 'daily') {
+    return 0;
+  }
+  return Math.round((target - today) / 86400000);
+}
+
+function cdFmtDate(s) {
+  const d = new Date(s + 'T00:00:00');
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+}
+
+async function loadCountdowns() {
+  const list = document.getElementById('cd-list');
+  if (!list) return;
+  try {
+    const cds = await api('GET', '/countdowns');
+    const today = todayStr();
+    const active = cds.filter(c => c.rep !== 'none' || c.date >= today);
+    if (!active.length) {
+      list.innerHTML = '<div class="empty">暂无倒数日，点击 + 添加~</div>'; return;
+    }
+    list.innerHTML = active.map(c => {
+      const days = cdDays(c.date, c.rep);
+      const daysStr = days === 0 ? '🎉 今天！' : days > 0 ? `还有 ${days} 天` : `已过 ${-days} 天`;
+      const repMap = { none:'', yearly:' · 每年', monthly:' · 每月', daily:' · 每日' };
+      return `<div class="cd-card" ondblclick="openEditCd(${JSON.stringify(c).replace(/"/g,'&quot;')})">
+        <div><div class="cd-name">${esc(c.name)}</div>
+          <div class="cd-date">${cdFmtDate(c.date)}${repMap[c.rep]||''}</div></div>
+        <div><div class="cd-days">${daysStr}</div></div>
+      </div>`;
+    }).join('');
+  } catch(e) { list.innerHTML = '<div class="empty">加载失败</div>'; }
+}
+
+function openAddCd() {
+  document.getElementById('sheet-title').innerHTML =
+    '添加倒数日 <button class="close" onclick="closeSheet()">×</button>';
+  document.getElementById('sheet-body').innerHTML = `
+    <div class="field"><div class="label">名称</div>
+      <input class="inp" id="f-cd-name" placeholder="事件名称"></div>
+    <div class="field"><div class="label">日期</div>
+      <input class="inp" id="f-cd-date" type="date" value="${todayStr()}"></div>
+    <div class="label">重复</div>
+    <div class="pri-sel" style="margin-bottom:12px" id="rep-sel">
+      <button class="pri-btn sel" style="background:var(--pink);color:var(--text)" onclick="selRep('none')">不重复</button>
+      <button class="pri-btn" style="background:var(--bg);color:var(--textg)" onclick="selRep('yearly')">每年</button>
+      <button class="pri-btn" style="background:var(--bg);color:var(--textg)" onclick="selRep('monthly')">每月</button>
+      <button class="pri-btn" style="background:var(--bg);color:var(--textg)" onclick="selRep('daily')">每日</button>
+    </div>
+    <button class="btn" style="background:var(--pink2)" onclick="submitCd()">添加倒数日 ⏰</button>`;
+  selRepVar = 'none'; openSheet();
+}
+
+let selRepVar = 'none';
+const repOpts = ['none','yearly','monthly','daily'];
+function selRep(r) {
+  selRepVar = r;
+  document.querySelectorAll('#rep-sel button').forEach((b, i) => {
+    b.style.background = repOpts[i] === r ? 'var(--pink2)' : 'var(--bg)';
+    b.style.color = repOpts[i] === r ? 'var(--text)' : 'var(--textg)';
+  });
+}
+
+async function submitCd() {
+  const name = document.getElementById('f-cd-name')?.value.trim();
+  const date = document.getElementById('f-cd-date')?.value;
+  if (!name || !date) { alert('请输入名称和日期'); return; }
+  await api('POST', '/countdowns', { name, date, rep: selRepVar });
+  closeSheet(); await loadCountdowns();
+}
+
+function openEditCd(c) {
+  document.getElementById('sheet-title').innerHTML =
+    '编辑倒数日 <button class="close" onclick="closeSheet()">×</button>';
+  document.getElementById('sheet-body').innerHTML = `
+    <div class="field"><div class="label">名称</div>
+      <input class="inp" id="f-cd-name" value="${esc(c.name)}"></div>
+    <div class="field"><div class="label">日期</div>
+      <input class="inp" id="f-cd-date" type="date" value="${c.date}"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" style="background:var(--green)" onclick="updateCd('${c.id}')">💾 保存</button>
+      <button class="btn" style="background:#FFEEEE;color:var(--urgent)" onclick="deleteCd('${c.id}')">🗑 删除</button>
+    </div>`;
+  selRepVar = c.rep || 'none'; openSheet();
+}
+
+async function updateCd(cid) {
+  const name = document.getElementById('f-cd-name')?.value.trim();
+  const date = document.getElementById('f-cd-date')?.value;
+  if (!name || !date) return;
+  await api('PUT', `/countdowns/${cid}`, { name, date, rep: selRepVar });
+  closeSheet(); await loadCountdowns();
+}
+
+async function deleteCd(cid) {
+  if (!confirm('删除这个倒数日？')) return;
+  await api('DELETE', `/countdowns/${cid}`);
+  closeSheet(); await loadCountdowns();
+}
+
+// ── WEIGHT ────────────────────────────────────────────────────────
+async function renderWeight() {
+  const mc = document.getElementById('main-content');
+  mc.innerHTML = `
+    <div class="card">
+      <div class="card-title">⚖️ 记录今日体重</div>
+      <div class="wt-inputs">
+        <div class="wt-inp-wrap"><label>体重</label>
+          <input id="wt-w" type="number" step="0.1" placeholder="--"><span style="font-size:11px;color:var(--textg)">kg</span></div>
+        <div class="wt-inp-wrap"><label>腰围</label>
+          <input id="wt-ws" type="number" step="0.1" placeholder="--"><span style="font-size:11px;color:var(--textg)">cm</span></div>
+      </div>
+      <button class="wt-add-btn" onclick="addWeight()">+ 记录</button>
+      <div id="wt-latest"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">本周体重 (kg)</div>
+      <canvas id="cvs-w" height="120"></canvas>
+    </div>
+    <div class="card">
+      <div class="card-title">本周腰围 (cm)</div>
+      <canvas id="cvs-ws" height="120"></canvas>
+    </div>`;
+  await loadWeight();
+}
+
+async function loadWeight() {
+  try {
+    const all = await api('GET', '/weight');
+    // Latest
+    const latest = all.length ? all[all.length - 1] : null;
+    const latestEl = document.getElementById('wt-latest');
+    if (latestEl && latest) {
+      latestEl.innerHTML = `<div style="background:var(--green);border-radius:10px;padding:8px 12px;font-size:13px">
+        最新：${latest.w != null ? latest.w+'kg' : '--'}  腰围：${latest.ws != null ? latest.ws+'cm' : '--'}
+        <span style="color:var(--textg);font-size:11px"> (${latest.date})</span></div>`;
+    }
+    // This week
+    const mon = getMonday(new Date());
+    const lbls = ['周一','周二','周三','周四','周五','周六','周日'];
+    const wData = Array.from({length:7}, (_,i) => {
+      const d = new Date(mon); d.setDate(d.getDate() + i);
+      const key = d.toISOString().slice(0,10);
+      const e = all.find(x => x.date === key);
+      return { label: lbls[i], w: e?.w ?? null, ws: e?.ws ?? null };
+    });
+    drawChart('cvs-w', wData.map(d=>d.label), wData.map(d=>d.w), '#FF9F7F');
+    drawChart('cvs-ws', wData.map(d=>d.label), wData.map(d=>d.ws), '#74B9FF');
+  } catch(e) {}
+}
+
+function getMonday(d) {
+  const day = d.getDay() || 7;
+  const mon = new Date(d);
+  mon.setDate(d.getDate() - day + 1);
+  mon.setHours(0,0,0,0);
+  return mon;
+}
+
+async function addWeight() {
+  const w = parseFloat(document.getElementById('wt-w')?.value) || null;
+  const ws = parseFloat(document.getElementById('wt-ws')?.value) || null;
+  if (w === null && ws === null) { alert('请输入体重或腰围'); return; }
+  await api('POST', '/weight', { w, ws });
+  document.getElementById('wt-w').value = '';
+  document.getElementById('wt-ws').value = '';
+  await loadWeight();
+}
+
+function drawChart(canvasId, labels, values, color) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+  canvas.height = 120 * window.devicePixelRatio;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio;
+  ctx.scale(dpr, dpr);
+  const W = canvas.offsetWidth, H = 120;
+  const pL=38, pR=8, pT=12, pB=22;
+  const cW=W-pL-pR, cH=H-pT-pB;
+  ctx.fillStyle='#FFF8EE'; ctx.fillRect(0,0,W,H);
+  const nv = values.filter(v=>v!==null);
+  if (!nv.length) {
+    ctx.fillStyle='#9A8878'; ctx.font=`12px sans-serif`;
+    ctx.textAlign='center'; ctx.fillText('暂无数据',W/2,H/2); return;
+  }
+  const mn=Math.min(...nv), mx=Math.max(...nv);
+  const rng=mx-mn||1, pad=rng*.35;
+  const ymin=mn-pad, ymax=mx+pad;
+  const tx=i=>pL+(i/(labels.length-1||1))*cW;
+  const ty=v=>pT+cH-((v-ymin)/(ymax-ymin))*cH;
+  // Grid lines
+  ctx.strokeStyle='#F0E0D0'; ctx.lineWidth=1;
+  for(let i=0;i<5;i++){const y=pT+(i/4)*cH;ctx.beginPath();ctx.moveTo(pL,y);ctx.lineTo(pL+cW,y);ctx.stroke();}
+  // Labels
+  ctx.fillStyle='#9A8878'; ctx.font=`10px sans-serif`; ctx.textAlign='center';
+  labels.forEach((lb,i)=>ctx.fillText(lb,tx(i),H-6));
+  ctx.textAlign='right';
+  [0,0.5,1].forEach(f=>{const v=ymin+f*(ymax-ymin);ctx.fillText(v.toFixed(1),pL-4,ty(v)+4);});
+  // Line
+  ctx.strokeStyle=color; ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.lineJoin='round';
+  let started=false;
+  ctx.beginPath();
+  values.forEach((v,i)=>{if(v===null){started=false;return;}
+    if(!started){ctx.moveTo(tx(i),ty(v));started=true;}else{ctx.lineTo(tx(i),ty(v));}});
+  ctx.stroke();
+  // Dots
+  values.forEach((v,i)=>{if(v===null)return;
+    ctx.beginPath();ctx.arc(tx(i),ty(v),4,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();
+    ctx.beginPath();ctx.arc(tx(i),ty(v),2,0,Math.PI*2);ctx.fillStyle='white';ctx.fill();
+    ctx.fillStyle=color;ctx.font=`10px sans-serif`;ctx.textAlign='center';
+    ctx.fillText(v.toFixed(1),tx(i),ty(v)-8);});
+}
+
+// ── THOUGHTS ──────────────────────────────────────────────────────
+let thoughtsTab = 'year';
+
+async function renderThoughts() {
+  const mc = document.getElementById('main-content');
+  mc.innerHTML = `
+    <div class="tabs">
+      <button class="tab active" id="tt-year" onclick="switchThTab('year')">年计划</button>
+      <button class="tab" id="tt-month" onclick="switchThTab('month')">月计划</button>
+      <button class="tab" id="tt-week" onclick="switchThTab('week')">周计划</button>
+    </div>
+    <div id="thought-list"></div>`;
+  addFab(() => openAddThought());
+  await loadThoughts();
+}
+
+function switchThTab(t) {
+  thoughtsTab = t;
+  ['year','month','week'].forEach(x=>{
+    document.getElementById('tt-'+x)?.classList.toggle('active', x===t);
+  });
+  loadThoughts();
+}
+
+function thPeriodLabel(type, period) {
+  if (type==='year') return period+'年';
+  if (type==='month') { const p=period.split('-'); return p[0]+'年'+parseInt(p[1])+'月'; }
+  if (type==='week') { const p=period.split('-W'); return p[0]+'年第'+parseInt(p[1])+'周'; }
+  return period;
+}
+
+async function loadThoughts() {
+  const list = document.getElementById('thought-list');
+  if (!list) return;
+  try {
+    const items = await api('GET', `/thoughts?type=${thoughtsTab}`);
+    if (!items.length) { list.innerHTML='<div class="empty">暂无记录，点击 + 添加~</div>'; return; }
+    list.innerHTML = items.map(t => `
+      <div class="thought-card" ondblclick='openEditThought(${JSON.stringify(t).replace(/'/g,"\\'")} )'>
+        <div class="th-top">
+          <span class="th-created">${t.created}</span>
+          <span class="th-period">${thPeriodLabel(t.type, t.period)}</span>
+        </div>
+        <div class="th-content">${esc(t.content)}</div>
+      </div>`).join('');
+  } catch(e) { list.innerHTML='<div class="empty">加载失败</div>'; }
+}
+
+function openAddThought() {
+  const today = new Date();
+  document.getElementById('sheet-title').innerHTML =
+    '添加想法 <button class="close" onclick="closeSheet()">×</button>';
+  document.getElementById('sheet-body').innerHTML = `
+    <div class="label">类型</div>
+    <div class="pri-sel" id="th-type-sel" style="margin-bottom:10px">
+      <button onclick="selThType('year')">年计划</button>
+      <button onclick="selThType('month')">月计划</button>
+      <button onclick="selThType('week')">周计划</button>
+    </div>
+    <div id="th-period-row" class="period-row"></div>
+    <div class="field"><div class="label">内容</div>
+      <textarea id="f-th-content" rows="6" placeholder="写下你的想法和计划..."></textarea></div>
+    <button class="btn" onclick="submitThought()">添加 💭</button>`;
+  selThTypeVar = thoughtsTab;
+  selThType(thoughtsTab);
+  openSheet();
+}
+
+let selThTypeVar = 'year';
+const thTypeOpts = ['year','month','week'];
+function selThType(t) {
+  selThTypeVar = t;
+  document.querySelectorAll('#th-type-sel button').forEach((b,i)=>{
+    b.style.background = thTypeOpts[i]===t ? 'var(--accent)' : 'var(--bg)';
+    b.style.color = thTypeOpts[i]===t ? 'var(--text)' : 'var(--textg)';
+  });
+  const today = new Date();
+  const yr = today.getFullYear();
+  const mo = today.getMonth()+1;
+  // ISO week
+  const jan1 = new Date(yr,0,1);
+  const wk = Math.ceil((((today-jan1)/86400000)+jan1.getDay()+1)/7);
+  const row = document.getElementById('th-period-row');
+  if (t==='year') {
+    row.innerHTML=`<label>年份</label><input id="ph-yr" value="${yr}" style="width:70px">`;
+  } else if (t==='month') {
+    row.innerHTML=`<label>年份</label><input id="ph-yr" value="${yr}" style="width:70px">
+      <label>月份</label><input id="ph-mo" value="${mo}" style="width:50px">`;
+  } else {
+    row.innerHTML=`<label>年份</label><input id="ph-yr" value="${yr}" style="width:70px">
+      <label>第</label><input id="ph-wk" value="${wk}" style="width:50px"><label>周</label>`;
+  }
+}
+
+function getThPeriod() {
+  const t = selThTypeVar;
+  const yr = document.getElementById('ph-yr')?.value;
+  if (t==='year') return yr;
+  const mo = document.getElementById('ph-mo')?.value;
+  if (t==='month') return `${yr}-${String(mo).padStart(2,'0')}`;
+  const wk = document.getElementById('ph-wk')?.value;
+  return `${yr}-W${String(wk).padStart(2,'0')}`;
+}
+
+async function submitThought() {
+  const content = document.getElementById('f-th-content')?.value.trim();
+  if (!content) { alert('请输入内容'); return; }
+  const period = getThPeriod();
+  await api('POST', '/thoughts', { type: selThTypeVar, period, content });
+  closeSheet(); await loadThoughts();
+}
+
+function openEditThought(t) {
+  document.getElementById('sheet-title').innerHTML =
+    `编辑 — ${thPeriodLabel(t.type,t.period)} <button class="close" onclick="closeSheet()">×</button>`;
+  document.getElementById('sheet-body').innerHTML = `
+    <div class="field"><textarea id="f-th-edit" rows="8">${esc(t.content)}</textarea></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" style="background:var(--green)" onclick="updateThought('${t.id}')">💾 保存</button>
+      <button class="btn" style="background:#FFEEEE;color:var(--urgent)" onclick="deleteThought('${t.id}')">🗑 删除</button>
+    </div>`;
+  openSheet();
+}
+
+async function updateThought(tid) {
+  const content = document.getElementById('f-th-edit')?.value.trim();
+  if (!content) return;
+  await api('PUT', `/thoughts/${tid}`, { content });
+  closeSheet(); await loadThoughts();
+}
+
+async function deleteThought(tid) {
+  if (!confirm('删除这条记录？')) return;
+  await api('DELETE', `/thoughts/${tid}`);
+  closeSheet(); await loadThoughts();
+}
+
+// ── Sheet / FAB helpers ───────────────────────────────────────────
+function openSheet() {
+  document.getElementById('overlay').classList.add('open');
+}
+function closeSheet(e) {
+  if (e && e.target !== document.getElementById('overlay')) return;
+  document.getElementById('overlay').classList.remove('open');
+}
+function addFab(fn) {
+  const old = document.getElementById('fab');
+  if (old) old.remove();
+  const b = document.createElement('button');
+  b.className='fab'; b.id='fab'; b.textContent='+';
+  b.onclick = fn;
+  document.body.appendChild(b);
+}
+
+// ── Utils ─────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>

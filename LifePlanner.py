@@ -5,14 +5,68 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
 import tkinter.font as tkfont
-import json, os, math, uuid
+import json, os, math, uuid, time as _time
+try:
+    import requests as _req
+except ImportError:
+    _req = None
 from datetime import datetime, date, timedelta
 import calendar as cal_mod
 
 # ================================================================
-# DATA FILE
+# API CONFIG
 # ================================================================
-DATA_FILE = os.path.join(os.path.expanduser("~"), "Documents", "lifeplanner_data.json")
+_CFG_FILE = os.path.join(os.path.expanduser("~"), "Documents", "lifeplanner_config.json")
+
+def _load_cfg():
+    try:
+        with open(_CFG_FILE, "r", encoding="utf-8") as f: return json.load(f)
+    except: return {}
+
+def _save_cfg(cfg):
+    try:
+        os.makedirs(os.path.dirname(_CFG_FILE), exist_ok=True)
+        with open(_CFG_FILE, "w", encoding="utf-8") as f: json.dump(cfg, f)
+    except: pass
+
+_cfg       = _load_cfg()
+_API_BASE  = _cfg.get("api_base",  "")
+_API_TOKEN = _cfg.get("api_token", "")
+
+def set_api_config(base, token):
+    global _API_BASE, _API_TOKEN, _cfg
+    _API_BASE  = base.rstrip("/") if base else ""
+    _API_TOKEN = token
+    _cfg = {"api_base": _API_BASE, "api_token": _API_TOKEN}
+    _save_cfg(_cfg); _invalidate_cache()
+
+def _api(method, path, **kwargs):
+    if _req is None:
+        raise RuntimeError("请安装 requests 库：pip install requests")
+    if not _API_BASE:
+        raise ConnectionError("未配置后端地址，请点击工具栏「⚙ 设置」")
+    r = getattr(_req, method)(
+        _API_BASE + path, headers={"x-api-token": _API_TOKEN}, timeout=12, **kwargs)
+    r.raise_for_status(); return r.json()
+
+# ── 30-second session cache ────────────────────────────────────────
+_cache    = None
+_cache_ts = 0.0
+
+def _load():
+    global _cache, _cache_ts
+    now = _time.time()
+    if _cache is None or now - _cache_ts > 30:
+        try:
+            _cache = _api("get", "/export"); _cache_ts = now
+        except Exception:
+            if _cache is None:
+                _cache = {"tasks": {}, "countdowns": [], "weight": [],
+                          "summaries": {}, "thoughts": []}
+    return _cache
+
+def _invalidate_cache():
+    global _cache; _cache = None
 
 # ================================================================
 # THEME COLORS
@@ -47,27 +101,8 @@ PRIO_BADGE  = {"u": "#FFE0E0", "i": "#FFE8D8", "n": "#E0EEFF"}
 WEEKDAY_CN = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
 
 # ================================================================
-# DATA MANAGEMENT
+# DATA FUNCTIONS
 # ================================================================
-def _load():
-    if not os.path.exists(DATA_FILE):
-        return {"tasks": {}, "countdowns": [], "weight": [], "summaries": {}, "thoughts": []}
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            d = json.load(f)
-            for k in ("tasks", "summaries"):
-                if k not in d: d[k] = {}
-            for k in ("countdowns", "weight", "thoughts"):
-                if k not in d: d[k] = []
-            return d
-    except:
-        return {"tasks": {}, "countdowns": [], "weight": [], "summaries": {}, "thoughts": []}
-
-def _save(d):
-    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(d, f, ensure_ascii=False, indent=2)
-
 def dk(d):
     if isinstance(d, str): return d
     return d.strftime("%Y-%m-%d")
@@ -76,63 +111,46 @@ def today_key(): return dk(date.today())
 
 # ─── TASKS ───────────────────────────────────────────────────────
 def task_add(date_key, name, desc, pri):
-    d = _load()
-    if date_key not in d["tasks"]: d["tasks"][date_key] = []
-    d["tasks"][date_key].append({"id": uuid.uuid4().hex[:8], "name": name,
-                                   "desc": desc, "pri": pri, "done": False})
-    _save(d)
+    _api("post", f"/tasks/{date_key}", json={"name": name, "desc": desc, "pri": pri})
+    _invalidate_cache()
 
 def task_toggle(date_key, tid):
-    d = _load()
-    for t in d["tasks"].get(date_key, []):
-        if t["id"] == tid: t["done"] = not t["done"]
-    _save(d)
+    _api("patch", f"/tasks/{date_key}/{tid}/toggle"); _invalidate_cache()
 
 def task_del(date_key, tid):
-    d = _load()
-    d["tasks"][date_key] = [t for t in d["tasks"].get(date_key, []) if t["id"] != tid]
-    _save(d)
+    _api("delete", f"/tasks/{date_key}/{tid}"); _invalidate_cache()
 
 def tasks_for(date_key):
-    return list(_load()["tasks"].get(date_key, []))
+    try: return _api("get", f"/tasks/{date_key}")
+    except Exception: return list(_load()["tasks"].get(date_key, []))
 
 def task_edit(date_key, tid, name, desc, pri):
-    d = _load()
-    for t in d["tasks"].get(date_key, []):
-        if t["id"] == tid:
-            t["name"] = name; t["desc"] = desc; t["pri"] = pri
-    _save(d)
+    _api("put", f"/tasks/{date_key}/{tid}",
+         json={"name": name, "desc": desc, "pri": pri, "done": False})
+    _invalidate_cache()
 
 def cd_edit(cid, name, date_str, rep):
-    d = _load()
-    for c in d["countdowns"]:
-        if c["id"] == cid:
-            c["name"] = name; c["date"] = date_str; c["rep"] = rep
-    _save(d)
+    _api("put", f"/countdowns/{cid}",
+         json={"name": name, "date": date_str, "rep": rep})
+    _invalidate_cache()
 
 def tasks_in_range(sk, ek):
-    res = []
-    for k, ts in _load()["tasks"].items():
-        if sk <= k <= ek: res.extend(ts)
-    return res
+    try: return _api("get", f"/tasks-range?start={sk}&end={ek}")
+    except Exception:
+        res = []
+        for k, ts in _load()["tasks"].items():
+            if sk <= k <= ek: res.extend(ts)
+        return res
 
 # ─── COUNTDOWNS ──────────────────────────────────────────────────
 def cd_add(name, date_str, rep):
-    d = _load()
-    d["countdowns"].append({"id": uuid.uuid4().hex[:8], "name": name, "date": date_str, "rep": rep})
-    _save(d)
+    _api("post", "/countdowns", json={"name": name, "date": date_str, "rep": rep})
+    _invalidate_cache()
 
 def cd_del(cid):
-    d = _load(); d["countdowns"] = [c for c in d["countdowns"] if c["id"] != cid]; _save(d)
+    _api("delete", f"/countdowns/{cid}"); _invalidate_cache()
 
-def cd_cleanup():
-    d = _load(); today = date.today()
-    before = len(d["countdowns"])
-    d["countdowns"] = [
-        c for c in d["countdowns"]
-        if c.get("rep", "none") != "none" or date.fromisoformat(c["date"]) >= today
-    ]
-    if len(d["countdowns"]) != before: _save(d)
+def cd_cleanup(): pass  # backend doesn't store expired one-time events
 
 def cd_next_date(c):
     today = date.today()
@@ -174,104 +192,83 @@ def cd_dates_in_month(year, month):
             if o.year == year and o.month == month: s.add(o.day)
     return s
 
-# ─── THOUGHTS (胡思乱想) ─────────────────────────────────────────
+# ─── THOUGHTS ─────────────────────────────────────────────────────
 def period_label(type_, period):
     if type_ == "year":  return f"{period}年"
     if type_ == "month":
-        p = period.split("-")
-        return f"{p[0]}年{int(p[1])}月"
+        p = period.split("-"); return f"{p[0]}年{int(p[1])}月"
     if type_ == "week":
-        p = period.split("-W")
-        return f"{p[0]}年第{int(p[1])}周"
+        p = period.split("-W"); return f"{p[0]}年第{int(p[1])}周"
     return period
 
 def thought_add(type_, period, content):
-    d = _load()
-    d["thoughts"].append({"id": uuid.uuid4().hex[:8], "type": type_,
-                           "period": period, "content": content,
-                           "created": datetime.now().strftime("%Y-%m-%d %H:%M")})
-    _save(d)
+    _api("post", "/thoughts", json={"type": type_, "period": period, "content": content})
+    _invalidate_cache()
 
 def thought_edit(tid, type_, period, content):
-    d = _load()
-    for t in d["thoughts"]:
-        if t["id"] == tid:
-            t["type"] = type_; t["period"] = period; t["content"] = content
-    _save(d)
+    _api("put", f"/thoughts/{tid}", json={"content": content}); _invalidate_cache()
 
 def thought_del(tid):
-    d = _load()
-    d["thoughts"] = [t for t in d["thoughts"] if t["id"] != tid]
-    _save(d)
+    _api("delete", f"/thoughts/{tid}"); _invalidate_cache()
 
 def thoughts_by_type(type_):
-    return [t for t in _load()["thoughts"] if t["type"] == type_]
+    try: return _api("get", f"/thoughts?type={type_}")
+    except Exception: return [t for t in _load()["thoughts"] if t["type"] == type_]
 
 # ─── WEIGHT ──────────────────────────────────────────────────────
 def weight_add(w, ws):
-    d = _load(); key = today_key()
-    idx = next((i for i, e in enumerate(d["weight"]) if e["date"] == key), -1)
-    if idx >= 0:
-        if w is not None:  d["weight"][idx]["w"]  = w
-        if ws is not None: d["weight"][idx]["ws"] = ws
-    else:
-        d["weight"].append({"date": key, "w": w, "ws": ws})
-    d["weight"].sort(key=lambda e: e["date"]); _save(d)
+    _api("post", "/weight", json={"w": w, "ws": ws}); _invalidate_cache()
 
 def weight_del(date_key):
-    d = _load()
-    d["weight"] = [e for e in d["weight"] if e["date"] != date_key]
-    _save(d)
+    _api("delete", f"/weight/{date_key}"); _invalidate_cache()
 
 def weight_update(date_key, w, ws):
-    d = _load()
-    idx = next((i for i, e in enumerate(d["weight"]) if e["date"] == date_key), -1)
-    if idx >= 0:
-        if w is not None: d["weight"][idx]["w"] = w
-        if ws is not None: d["weight"][idx]["ws"] = ws
-    _save(d)
+    _api("put", f"/weight/{date_key}", json={"w": w, "ws": ws}); _invalidate_cache()
 
 def weight_latest():
-    d = _load(); return d["weight"][-1] if d["weight"] else None
+    wt = _load()["weight"]; return wt[-1] if wt else None
 
 def weight_for_week(monday):
-    d = _load(); res = []
+    all_w = _load()["weight"]; res = []
     for i in range(7):
         key = dk(monday + timedelta(i))
-        e = next((x for x in d["weight"] if x["date"] == key), None)
-        res.append({"w": e["w"] if e and "w" in e else None,
-                    "ws": e["ws"] if e and "ws" in e else None})
+        e = next((x for x in all_w if x["date"] == key), None)
+        res.append({"w":  e["w"]  if e and e.get("w")  is not None else None,
+                    "ws": e["ws"] if e and e.get("ws") is not None else None})
     return res
 
 def weight_for_month(year, month):
-    d = _load(); res = []
+    all_w = _load()["weight"]; res = []
     for day in range(1, cal_mod.monthrange(year, month)[1] + 1):
         key = f"{year}-{month:02d}-{day:02d}"
-        e = next((x for x in d["weight"] if x["date"] == key), None)
-        res.append({"label": str(day), "w": e["w"] if e and "w" in e else None,
-                    "ws": e["ws"] if e and "ws" in e else None})
+        e = next((x for x in all_w if x["date"] == key), None)
+        res.append({"label": str(day),
+                    "w":  e["w"]  if e and e.get("w")  is not None else None,
+                    "ws": e["ws"] if e and e.get("ws") is not None else None})
     return res
 
 def weight_for_year(year):
-    d = _load(); res = []
+    all_w = _load()["weight"]
     mnames = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"]
+    res = []
     for m in range(1, 13):
-        es = [e for e in d["weight"] if e["date"].startswith(f"{year}-{m:02d}")]
-        ws = [e["w"] for e in es if e.get("w") is not None]
-        wss = [e["ws"] for e in es if e.get("ws") is not None]
+        es  = [e for e in all_w if e["date"].startswith(f"{year}-{m:02d}")]
+        wv  = [e["w"]  for e in es if e.get("w")  is not None]
+        wsv = [e["ws"] for e in es if e.get("ws") is not None]
         res.append({"label": mnames[m-1],
-                    "w": sum(ws)/len(ws) if ws else None,
-                    "ws": sum(wss)/len(wss) if wss else None})
+                    "w":  sum(wv) /len(wv)  if wv  else None,
+                    "ws": sum(wsv)/len(wsv) if wsv else None})
     return res
 
 # ─── SUMMARIES ───────────────────────────────────────────────────
 def reflection_save(key, text):
-    d = _load()
-    if key not in d["summaries"]: d["summaries"][key] = {}
-    d["summaries"][key]["ref"] = text; _save(d)
+    _api("put", f"/summaries/{key}", json={"ref": text}); _invalidate_cache()
 
 def reflection_get(key):
-    return _load()["summaries"].get(key, {}).get("ref", "")
+    try: return _api("get", f"/summaries/{key}").get("ref", "")
+    except Exception:
+        v = _load()["summaries"].get(key, {})
+        return v.get("ref", "") if isinstance(v, dict) else str(v)
 
 # ================================================================
 # HELPERS
@@ -410,6 +407,8 @@ class App:
         self._build()
         self.root.after(100, self._render_all)
         self.root.bind("<Configure>", self._on_resize)
+        if not _API_BASE:
+            self.root.after(300, self._open_api_settings)
 
     def run(self): self.root.mainloop()
 
@@ -466,6 +465,7 @@ class App:
             ("📅 周总结",     GREEN,   GREEN2,          lambda: self._open_summary("week")),
             ("📊 月总结",     BLUE,    "#B0D8FF",       lambda: self._open_summary("month")),
             ("🗓️ 年总结",    LAV,     "#D8C8F8",       lambda: self._open_summary("year")),
+            ("⚙ 设置",       "#E8E8E8", "#D0D0D0",     self._open_api_settings),
         ]
         for txt, bg, bgh, cmd in specs:
             lbl = clickable_label(tb, txt, bg, TEXT, (self.FONT, 12, "bold"), cmd, 13, 8)
@@ -1497,6 +1497,92 @@ class App:
         win.bind("<Escape>", lambda e: win.destroy())
         refresh()
 
+
+    # ──────────────────────────────────────────────────────────────
+    # API SETTINGS DIALOG
+    # ──────────────────────────────────────────────────────────────
+    def _open_api_settings(self):
+        win = tk.Toplevel(self.root); win.title("⚙ 后端设置")
+        win.configure(bg=BG); win.resizable(False, False); win.grab_set()
+        self._center(win, 480, 340)
+
+        card = RCard(win, r=16, bg=CARD)
+        card.pack(fill="both", expand=True, padx=18, pady=18)
+        f = card.inner
+
+        tk.Label(f, text="⚙ 后端 API 设置", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 15, "bold")).pack(pady=(16, 12))
+
+        # URL
+        tk.Label(f, text="API 地址（如 https://xxx.railway.app）",
+                 bg=CARD, fg=TEXT, font=(self.FONT, 11)).pack(anchor="w", padx=20)
+        url_var = tk.StringVar(value=_API_BASE)
+        url_e = tk.Entry(f, textvariable=url_var, font=(self.FONT, 12),
+                         relief="flat", bg="#F5F5F5", fg=TEXT, width=42)
+        url_e.pack(padx=20, pady=(2, 10), ipady=6)
+
+        # Token
+        tk.Label(f, text="API Token",
+                 bg=CARD, fg=TEXT, font=(self.FONT, 11)).pack(anchor="w", padx=20)
+        tok_var = tk.StringVar(value=_API_TOKEN)
+        tok_e = tk.Entry(f, textvariable=tok_var, font=(self.FONT, 12),
+                         relief="flat", bg="#F5F5F5", fg=TEXT, width=42, show="*")
+        tok_e.pack(padx=20, pady=(2, 16), ipady=6)
+
+        status_lbl = tk.Label(f, text="", bg=CARD, fg="#888", font=(self.FONT, 10))
+        status_lbl.pack()
+
+        def _test():
+            url = url_var.get().strip().rstrip("/")
+            tok = tok_var.get().strip()
+            if not url:
+                status_lbl.config(text="请填写 API 地址", fg="#E74C3C"); return
+            status_lbl.config(text="连接中…", fg="#888"); win.update_idletasks()
+            try:
+                r = _req.get(url + "/export", headers={"x-api-token": tok}, timeout=10)
+                if r.status_code == 200:
+                    status_lbl.config(text="✅ 连接成功", fg="#27AE60")
+                elif r.status_code == 403:
+                    status_lbl.config(text="❌ Token 错误", fg="#E74C3C")
+                else:
+                    status_lbl.config(text=f"❌ 状态码 {r.status_code}", fg="#E74C3C")
+            except Exception as ex:
+                status_lbl.config(text=f"❌ {ex}", fg="#E74C3C")
+
+        def _migrate():
+            import tkinter.filedialog as fd
+            path = fd.askopenfilename(title="选择旧数据 JSON 文件",
+                                      filetypes=[("JSON", "*.json")])
+            if not path: return
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                url = url_var.get().strip().rstrip("/")
+                tok = tok_var.get().strip()
+                r = _req.post(url + "/migrate",
+                              headers={"x-api-token": tok, "content-type": "application/json"},
+                              json=data, timeout=30)
+                r.raise_for_status()
+                status_lbl.config(text="✅ 数据迁移成功", fg="#27AE60")
+                _invalidate_cache()
+            except Exception as ex:
+                status_lbl.config(text=f"❌ {ex}", fg="#E74C3C")
+
+        def _save():
+            set_api_config(url_var.get().strip(), tok_var.get().strip())
+            win.destroy()
+            self._render_all()
+
+        btn_row = tk.Frame(f, bg=CARD)
+        btn_row.pack(pady=(4, 16))
+        for txt, cmd, bg, bgh in [
+            ("测试连接", _test,    BLUE,   "#B0D8FF"),
+            ("迁移旧数据", _migrate, ACCENT, ACCENT2),
+            ("保存",     _save,    GREEN,  GREEN2),
+        ]:
+            b = clickable_label(btn_row, txt, bg, TEXT, (self.FONT, 11, "bold"), cmd, 12, 6)
+            b.pack(side="left", padx=6)
+            hover_bind(b, bgh, bg)
 
     # ──────────────────────────────────────────────────────────────
     # 胡思乱想 DIALOG
