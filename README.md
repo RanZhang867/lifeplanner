@@ -25,7 +25,15 @@ pythonw LifePlanner.py
 
 ## 数据
 
-数据保存在 `~/Documents/lifeplanner_data.json`。
+数据优先保存在 OneDrive 根目录 `lifeplanner_data.json`，未安装 OneDrive 时回退到 `~/Documents/lifeplanner_data.json`。
+
+### 换新电脑迁移数据
+
+旧电脑上运行迁移脚本，将数据复制到 OneDrive 文件夹，新电脑登同一账号后数据自动同步：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File migrate_data.ps1
+```
 
 ## 第二次更新
 添加了胡思乱想模块，是用来写年计划月计划和周计划的地方。
