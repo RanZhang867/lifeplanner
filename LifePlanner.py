@@ -463,11 +463,9 @@ class App:
         specs = [
             ("💭 胡思乱想",  LAV,     "#D8C8F8",       self._open_thoughts),
             ("📤 导出记录",  GREEN,   GREEN2,           self._open_export_dialog),
-            ("✏️ 添加日程",   ACCENT,  ACCENT2,        self._open_add_task),
+            ("📝添加日程",   ACCENT,  ACCENT2,         self._open_add_task),
             ("⏰ 添加倒数日", PINK,    PINK2,           self._open_add_cd),
-            ("📅 周总结",     GREEN,   GREEN2,          lambda: self._open_summary("week")),
-            ("📊 月总结",     BLUE,    "#B0D8FF",       lambda: self._open_summary("month")),
-            ("🗓️ 年总结",    LAV,     "#D8C8F8",       lambda: self._open_summary("year")),
+            ("📊总结",       BLUE,    "#B0D8FF",       lambda: self._open_summary("week")),
         ]
         for txt, bg, bgh, cmd in specs:
             lbl = clickable_label(tb, txt, bg, TEXT, (self.FONT, 12, "bold"), cmd, 13, 8)
@@ -1378,7 +1376,7 @@ class App:
         tf = tk.Frame(win, bg=CARD); tf.pack(pady=(0, 8)); tabs = {}
 
         def sw(t): state["t"] = t; state["off"] = 0; upd_tabs(); refresh()
-        for tid, tlbl in [("week", "📅 周总结"), ("month", "📊 月总结"), ("year", "🗓️ 年总结")]:
+        for tid, tlbl in [("week", "📅周总结"), ("month", "📊月总结"), ("year", "🗓️年总结")]:
             b = tk.Label(tf, text=tlbl,
                          bg=ACCENT if tid == init_type else "#FFF8EE", fg=TEXT,
                          font=(self.FONT, 12, "bold"), padx=14, pady=5, cursor="hand2")
@@ -1546,11 +1544,11 @@ class App:
                          font=(self.FONT, 9)).pack(side="left")
                 tk.Label(top, text=period_label(item["type"], item["period"]),
                          bg=PINK, fg=PINK3, font=(self.FONT, 11, "bold")).pack(side="right")
-                preview = item["content"][:70] + ("…" if len(item["content"]) > 70 else "")
-                c_lbl = tk.Label(card, text=preview, bg=PINK, fg=TEXT,
-                                 font=(self.FONT, 11), anchor="w", justify="left",
+                c_lbl = tk.Label(card, text=item["content"], bg=PINK, fg=TEXT,
+                                 font=(self.FONT, 11), anchor="nw", justify="left",
                                  wraplength=230)
-                c_lbl.pack(anchor="w", pady=(4, 0))
+                c_lbl.pack(fill="x", pady=(4, 0))
+                c_lbl.bind("<Configure>", lambda e, l=c_lbl: l.config(wraplength=max(1, e.width - 8)))
                 def on_dbl(e, it=item):
                     self._open_thought_edit(it, refresh_list)
                 for w in (card, top, c_lbl):

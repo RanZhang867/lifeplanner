@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+*.pyo
+lifeplanner_data.json
