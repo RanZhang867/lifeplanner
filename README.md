@@ -25,7 +25,32 @@ pythonw LifePlanner.py
 
 ## 数据
 
-数据保存在 `~/Documents/lifeplanner_data.json`。
+本地模式：数据保存在 `~/Documents/lifeplanner_data.json`。
+
+云端模式：数据存储在 Supabase PostgreSQL，重启不丢失。
+
+## 后端部署（Render + Supabase）
+
+### 1. 创建数据库
+
+1. 注册 [Supabase](https://supabase.com)，新建项目
+2. 进入项目首页，点击顶部 **Connect** 按钮，复制 URI 格式的连接字符串
+
+### 2. 部署到 Render
+
+1. 注册 [Render](https://render.com)，新建 **Web Service**，连接本仓库
+2. 配置：
+   - **Root Directory**：`backend`
+   - **Build Command**：`pip install -r requirements.txt`
+   - **Start Command**：`uvicorn main:app --host 0.0.0.0 --port $PORT`
+3. 在 **Environment** 中添加环境变量：
+   - `DATABASE_URL`：Supabase 连接字符串
+   - `API_TOKEN`：自定义访问密钥（可选，默认 `lifeplanner_secret`）
+4. 部署，首次启动自动建表
+
+### 3. 连接桌面端
+
+打开桌面应用 → 设置 → 填入 Render 服务地址和 API Token
 
 ## 2026.5.8新增功能
 
@@ -38,7 +63,7 @@ pythonw LifePlanner.py
   内容按年份组织：年计划 → 年总结（含体重波动折线图）→ 各月 →各周，跳过空白章节，附页码。
 
   ### ☁️ 云端后端（跨设备同步）
-  `backend/` 目录为 FastAPI 后端，可部署至 Render所有数据存储在云端 SQLite。
+  `backend/` 目录为 FastAPI 后端，可部署至 Render，数据存储在云端 PostgreSQL（Supabase）。
   桌面端通过 REST API 同步数据，本地缓存 30 秒以减少请求次数。
 
   ### 📱 手机 Web 端
