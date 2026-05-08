@@ -462,7 +462,7 @@ class App:
                  font=(self.FONT, 19, "bold")).pack(side="left", padx=(14, 12))
         specs = [
             ("💭 胡思乱想",  LAV,     "#D8C8F8",       self._open_thoughts),
-            ("📤 导出记录",  GREEN,   GREEN2,           self._export_pdf),
+            ("📤 导出记录",  GREEN,   GREEN2,           self._open_export_dialog),
             ("✏️ 添加日程",   ACCENT,  ACCENT2,        self._open_add_task),
             ("⏰ 添加倒数日", PINK,    PINK2,           self._open_add_cd),
             ("📅 周总结",     GREEN,   GREEN2,          lambda: self._open_summary("week")),
@@ -1703,9 +1703,356 @@ class App:
         pop.bind("<Escape>", lambda e: pop.destroy())
 
     # ──────────────────────────────────────────────────────────────
+    # EXPORT DIALOG
+    # ──────────────────────────────────────────────────────────────
+    def _open_export_dialog(self):
+        win = tk.Toplevel(self.root)
+        win.title("导出记录")
+        win.configure(bg=CARD)
+        win.resizable(False, False)
+        win.grab_set()
+        self._center(win, 300, 360)
+        win.bind("<Escape>", lambda e: win.destroy())
+
+        tk.Label(win, text="📤 导出记录", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 17, "bold")).pack(pady=(22, 14))
+
+        frm = tk.Frame(win, bg=CARD)
+        frm.pack(fill="x", padx=24)
+
+        def make_btn(label, cmd):
+            b = tk.Button(frm, text=label, command=cmd,
+                          bg=TOOLBAR, fg=TEXT, font=(self.FONT, 12),
+                          relief="flat", cursor="hand2",
+                          pady=8, anchor="w", padx=14)
+            b.pack(fill="x", pady=3)
+            b.bind("<Enter>", lambda e: b.configure(bg=ACCENT))
+            b.bind("<Leave>", lambda e: b.configure(bg=TOOLBAR))
+
+        make_btn("📋  全部导出", lambda: (win.destroy(), self._export_pdf()))
+        make_btn("📅  年导出",   lambda: self._export_year_dialog(win))
+        make_btn("🗓  月导出",    lambda: self._export_month_dialog(win))
+        make_btn("📆  周导出",   lambda: self._export_week_dialog(win))
+        make_btn("✏  自由导出",   lambda: self._export_custom_dialog(win))
+
+        tk.Button(win, text="取消", command=win.destroy,
+                  bg=CARD, fg=TEXTG, font=(self.FONT, 10),
+                  relief="flat", cursor="hand2").pack(pady=(10, 18))
+
+    def _get_data_years(self):
+        d = _load()
+        thoughts   = d.get("thoughts", [])
+        summaries  = d.get("summaries", {})
+        tasks_data = d.get("tasks", {})
+        yrs = set()
+        for k in tasks_data:
+            try: yrs.add(int(k[:4]))
+            except: pass
+        for k in summaries:
+            try:
+                if k.startswith("y_"):   yrs.add(int(k[2:]))
+                elif k.startswith("m_"): yrs.add(int(k.split("_")[1]))
+                elif k.startswith("w_"): yrs.add(int(k[2:6]))
+            except: pass
+        for t in thoughts:
+            try: yrs.add(int(t["period"][:4]))
+            except: pass
+        return sorted(yrs)
+
+    def _export_year_dialog(self, parent):
+        years = self._get_data_years()
+        if not years:
+            messagebox.showinfo("提示", "暂无数据！", parent=parent); return
+
+        win = tk.Toplevel(parent)
+        win.title("年导出")
+        win.configure(bg=CARD)
+        win.resizable(False, False)
+        win.grab_set()
+        self._center(win, 280, 200)
+        win.bind("<Escape>", lambda e: win.destroy())
+
+        tk.Label(win, text="选择导出年份", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 14, "bold")).pack(pady=(20, 10))
+
+        var = tk.StringVar(value=str(years[-1]))
+        ttk.Combobox(win, textvariable=var,
+                     values=[str(y) for y in reversed(years)],
+                     state="readonly", width=12,
+                     font=(self.FONT, 12)).pack(pady=6)
+
+        def do_export():
+            year = int(var.get())
+            if messagebox.askyesno("确认", f"导出 {year} 年的全部记录？",
+                                   parent=win):
+                win.destroy(); parent.destroy()
+                self._export_pdf(start_dt=date(year, 1, 1),
+                                 end_dt=date(year, 12, 31))
+
+        tk.Button(win, text="导出", command=do_export,
+                  bg=GREEN, fg=TEXT, font=(self.FONT, 12, "bold"),
+                  relief="flat", cursor="hand2",
+                  pady=6, padx=20).pack(pady=(8, 4))
+        tk.Button(win, text="返回", command=win.destroy,
+                  bg=CARD, fg=TEXTG, font=(self.FONT, 10),
+                  relief="flat", cursor="hand2").pack(pady=(0, 14))
+
+    def _export_month_dialog(self, parent):
+        years = self._get_data_years()
+        if not years:
+            messagebox.showinfo("提示", "暂无数据！", parent=parent); return
+
+        win = tk.Toplevel(parent)
+        win.title("月导出")
+        win.configure(bg=CARD)
+        win.resizable(False, False)
+        win.grab_set()
+        self._center(win, 300, 210)
+        win.bind("<Escape>", lambda e: win.destroy())
+
+        tk.Label(win, text="选择导出月份", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 14, "bold")).pack(pady=(20, 10))
+
+        row = tk.Frame(win, bg=CARD)
+        row.pack()
+        yr_var = tk.StringVar(value=str(years[-1]))
+        mo_var = tk.StringVar(value="1")
+        ttk.Combobox(row, textvariable=yr_var,
+                     values=[str(y) for y in reversed(years)],
+                     state="readonly", width=8,
+                     font=(self.FONT, 12)).pack(side="left", padx=3)
+        tk.Label(row, text="年", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 12)).pack(side="left")
+        ttk.Combobox(row, textvariable=mo_var,
+                     values=[str(m) for m in range(1, 13)],
+                     state="readonly", width=5,
+                     font=(self.FONT, 12)).pack(side="left", padx=3)
+        tk.Label(row, text="月", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 12)).pack(side="left")
+
+        def do_export():
+            year = int(yr_var.get()); month = int(mo_var.get())
+            last = cal_mod.monthrange(year, month)[1]
+            if messagebox.askyesno("确认",
+                    f"导出 {year} 年 {month} 月的记录？", parent=win):
+                win.destroy(); parent.destroy()
+                self._export_pdf(start_dt=date(year, month, 1),
+                                 end_dt=date(year, month, last))
+
+        tk.Button(win, text="导出", command=do_export,
+                  bg=GREEN, fg=TEXT, font=(self.FONT, 12, "bold"),
+                  relief="flat", cursor="hand2",
+                  pady=6, padx=20).pack(pady=(12, 4))
+        tk.Button(win, text="返回", command=win.destroy,
+                  bg=CARD, fg=TEXTG, font=(self.FONT, 10),
+                  relief="flat", cursor="hand2").pack(pady=(0, 14))
+
+    def _export_week_dialog(self, parent):
+        years = self._get_data_years()
+        if not years:
+            messagebox.showinfo("提示", "暂无数据！", parent=parent); return
+
+        win = tk.Toplevel(parent)
+        win.title("周导出")
+        win.configure(bg=CARD)
+        win.resizable(False, False)
+        win.grab_set()
+        self._center(win, 310, 210)
+        win.bind("<Escape>", lambda e: win.destroy())
+
+        tk.Label(win, text="选择导出周", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 14, "bold")).pack(pady=(20, 10))
+
+        row = tk.Frame(win, bg=CARD)
+        row.pack()
+        yr_var = tk.StringVar(value=str(years[-1]))
+        wk_var = tk.StringVar(value="1")
+        ttk.Combobox(row, textvariable=yr_var,
+                     values=[str(y) for y in reversed(years)],
+                     state="readonly", width=8,
+                     font=(self.FONT, 12)).pack(side="left", padx=3)
+        tk.Label(row, text="年  第", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 12)).pack(side="left")
+        ttk.Combobox(row, textvariable=wk_var,
+                     values=[str(w) for w in range(1, 54)],
+                     state="readonly", width=5,
+                     font=(self.FONT, 12)).pack(side="left", padx=3)
+        tk.Label(row, text="周", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 12)).pack(side="left")
+
+        def do_export():
+            year = int(yr_var.get()); week = int(wk_var.get())
+            try:
+                start = datetime.strptime(
+                    f"{year}-W{week:02d}-1", "%G-W%V-%u").date()
+                end = start + timedelta(6)
+            except ValueError:
+                messagebox.showwarning(
+                    "提示", f"{year} 年没有第 {week} 周！", parent=win)
+                return
+            if messagebox.askyesno("确认",
+                    f"导出 {year} 年第 {week} 周\n"
+                    f"({start.month}月{start.day}日—"
+                    f"{end.month}月{end.day}日)的记录？",
+                    parent=win):
+                win.destroy(); parent.destroy()
+                self._export_pdf(start_dt=start, end_dt=end)
+
+        tk.Button(win, text="导出", command=do_export,
+                  bg=GREEN, fg=TEXT, font=(self.FONT, 12, "bold"),
+                  relief="flat", cursor="hand2",
+                  pady=6, padx=20).pack(pady=(12, 4))
+        tk.Button(win, text="返回", command=win.destroy,
+                  bg=CARD, fg=TEXTG, font=(self.FONT, 10),
+                  relief="flat", cursor="hand2").pack(pady=(0, 14))
+
+    def _export_custom_dialog(self, parent):
+        years = self._get_data_years()
+        if not years:
+            messagebox.showinfo("提示", "暂无数据！", parent=parent); return
+
+        win = tk.Toplevel(parent)
+        win.title("自由导出")
+        win.configure(bg=CARD)
+        win.resizable(False, False)
+        win.grab_set()
+        self._center(win, 370, 295)
+        win.bind("<Escape>", lambda e: win.destroy())
+
+        tk.Label(win, text="✏ 自由导出", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 14, "bold")).pack(pady=(18, 6))
+
+        yr_vals = [str(y) for y in reversed(years)]
+        mo_vals = [str(m) for m in range(1, 13)]
+        wk_vals = [str(w) for w in range(1, 54)]
+
+        range_var = tk.StringVar(value="year")
+        rfrm = tk.Frame(win, bg=CARD)
+        rfrm.pack(pady=4)
+        for val, lbl in [("year", "按年"), ("month", "按月"), ("week", "按周")]:
+            tk.Radiobutton(rfrm, text=lbl, variable=range_var, value=val,
+                           bg=CARD, fg=TEXT, font=(self.FONT, 11),
+                           activebackground=CARD,
+                           selectcolor=ACCENT).pack(side="left", padx=12)
+
+        content = tk.Frame(win, bg=CARD)
+        content.pack(pady=6, fill="x", padx=24)
+
+        # ── 年范围 ──
+        frm_y   = tk.Frame(content, bg=CARD)
+        from_yr = tk.StringVar(value=yr_vals[-1])
+        to_yr   = tk.StringVar(value=yr_vals[0])
+        for lbl, var in [("从", from_yr), ("到", to_yr)]:
+            r = tk.Frame(frm_y, bg=CARD); r.pack(pady=3)
+            tk.Label(r, text=lbl, bg=CARD, fg=TEXT,
+                     font=(self.FONT, 11), width=3).pack(side="left")
+            ttk.Combobox(r, textvariable=var, values=yr_vals,
+                         state="readonly", width=8,
+                         font=(self.FONT, 11)).pack(side="left", padx=3)
+            tk.Label(r, text="年", bg=CARD, fg=TEXT,
+                     font=(self.FONT, 11)).pack(side="left")
+
+        # ── 月范围 ──
+        frm_m     = tk.Frame(content, bg=CARD)
+        from_m_yr = tk.StringVar(value=yr_vals[-1])
+        from_m    = tk.StringVar(value="1")
+        to_m_yr   = tk.StringVar(value=yr_vals[0])
+        to_m      = tk.StringVar(value="12")
+        for lbl, yv, mv in [("从", from_m_yr, from_m), ("到", to_m_yr, to_m)]:
+            r = tk.Frame(frm_m, bg=CARD); r.pack(pady=3)
+            tk.Label(r, text=lbl, bg=CARD, fg=TEXT,
+                     font=(self.FONT, 11), width=3).pack(side="left")
+            ttk.Combobox(r, textvariable=yv, values=yr_vals,
+                         state="readonly", width=7,
+                         font=(self.FONT, 11)).pack(side="left", padx=2)
+            tk.Label(r, text="年", bg=CARD, fg=TEXT,
+                     font=(self.FONT, 11)).pack(side="left")
+            ttk.Combobox(r, textvariable=mv, values=mo_vals,
+                         state="readonly", width=4,
+                         font=(self.FONT, 11)).pack(side="left", padx=2)
+            tk.Label(r, text="月", bg=CARD, fg=TEXT,
+                     font=(self.FONT, 11)).pack(side="left")
+
+        # ── 周范围 ──
+        frm_w     = tk.Frame(content, bg=CARD)
+        from_w_yr = tk.StringVar(value=yr_vals[-1])
+        from_w    = tk.StringVar(value="1")
+        to_w_yr   = tk.StringVar(value=yr_vals[0])
+        to_w      = tk.StringVar(value="52")
+        for lbl, yv, wv in [("从", from_w_yr, from_w), ("到", to_w_yr, to_w)]:
+            r = tk.Frame(frm_w, bg=CARD); r.pack(pady=3)
+            tk.Label(r, text=lbl, bg=CARD, fg=TEXT,
+                     font=(self.FONT, 11), width=3).pack(side="left")
+            ttk.Combobox(r, textvariable=yv, values=yr_vals,
+                         state="readonly", width=7,
+                         font=(self.FONT, 11)).pack(side="left", padx=2)
+            tk.Label(r, text="年 第", bg=CARD, fg=TEXT,
+                     font=(self.FONT, 11)).pack(side="left")
+            ttk.Combobox(r, textvariable=wv, values=wk_vals,
+                         state="readonly", width=4,
+                         font=(self.FONT, 11)).pack(side="left", padx=2)
+            tk.Label(r, text="周", bg=CARD, fg=TEXT,
+                     font=(self.FONT, 11)).pack(side="left")
+
+        def show_mode(*_):
+            frm_y.pack_forget(); frm_m.pack_forget(); frm_w.pack_forget()
+            {"year": frm_y, "month": frm_m, "week": frm_w}[range_var.get()].pack()
+        range_var.trace("w", show_mode)
+        show_mode()
+
+        def do_export():
+            mode = range_var.get()
+            try:
+                if mode == "year":
+                    y1, y2 = int(from_yr.get()), int(to_yr.get())
+                    if y1 > y2:
+                        messagebox.showwarning("提示", "起始年不能大于结束年！",
+                                               parent=win); return
+                    s_dt = date(y1, 1, 1); e_dt = date(y2, 12, 31)
+                    desc = f"{y1} — {y2} 年"
+                elif mode == "month":
+                    y1, m1 = int(from_m_yr.get()), int(from_m.get())
+                    y2, m2 = int(to_m_yr.get()),   int(to_m.get())
+                    s_dt = date(y1, m1, 1)
+                    e_dt = date(y2, m2, cal_mod.monthrange(y2, m2)[1])
+                    if s_dt > e_dt:
+                        messagebox.showwarning("提示", "起始月不能大于结束月！",
+                                               parent=win); return
+                    desc = f"{y1}年{m1}月 — {y2}年{m2}月"
+                else:
+                    y1, w1 = int(from_w_yr.get()), int(from_w.get())
+                    y2, w2 = int(to_w_yr.get()),   int(to_w.get())
+                    s_dt = datetime.strptime(
+                        f"{y1}-W{w1:02d}-1", "%G-W%V-%u").date()
+                    e_mon = datetime.strptime(
+                        f"{y2}-W{w2:02d}-1", "%G-W%V-%u").date()
+                    e_dt = e_mon + timedelta(6)
+                    if s_dt > e_dt:
+                        messagebox.showwarning("提示", "起始周不能大于结束周！",
+                                               parent=win); return
+                    desc = f"{y1}年第{w1}周 — {y2}年第{w2}周"
+            except ValueError as ex:
+                messagebox.showwarning("提示", f"日期无效：{ex}", parent=win)
+                return
+            if messagebox.askyesno("确认", f"导出 {desc} 的记录？", parent=win):
+                win.destroy(); parent.destroy()
+                self._export_pdf(start_dt=s_dt, end_dt=e_dt)
+
+        bfrm = tk.Frame(win, bg=CARD)
+        bfrm.pack(pady=(6, 16))
+        tk.Button(bfrm, text="导出", command=do_export,
+                  bg=GREEN, fg=TEXT, font=(self.FONT, 12, "bold"),
+                  relief="flat", cursor="hand2",
+                  pady=6, padx=20).pack(side="left", padx=8)
+        tk.Button(bfrm, text="返回", command=win.destroy,
+                  bg=CARD, fg=TEXTG, font=(self.FONT, 10),
+                  relief="flat", cursor="hand2",
+                  pady=6).pack(side="left", padx=8)
+
+    # ──────────────────────────────────────────────────────────────
     # PDF EXPORT
     # ──────────────────────────────────────────────────────────────
-    def _export_pdf(self):
+    def _export_pdf(self, start_dt=None, end_dt=None):
         try:
             from reportlab.lib.pagesizes import A4
             from reportlab.lib import colors as rc
@@ -1722,11 +2069,12 @@ class App:
 
         # Register Chinese font (try multiple candidates)
         font_candidates = [
-            ("C:/Windows/Fonts/simhei.ttf",  False),
             ("C:/Windows/Fonts/msyh.ttc",    True),
             ("C:/Windows/Fonts/simsun.ttc",  True),
+            ("C:/Windows/Fonts/simhei.ttf",  False),
         ]
         registered = False
+        reg_fp = None; reg_ttc = False
         for fp, is_ttc in font_candidates:
             if not os.path.exists(fp): continue
             try:
@@ -1734,11 +2082,27 @@ class App:
                     pdfmetrics.registerFont(TTFont("CNFont", fp, subfontIndex=0))
                 else:
                     pdfmetrics.registerFont(TTFont("CNFont", fp))
-                registered = True; break
+                registered = True; reg_fp = fp; reg_ttc = is_ttc; break
             except Exception:
                 continue
         if not registered:
             messagebox.showwarning("提示", "找不到合适的中文字体，无法生成PDF。"); return
+
+        bold_candidates = [
+            ("C:/Windows/Fonts/msyhbd.ttc", True),
+            ("C:/Windows/Fonts/simhei.ttf", False),
+            (reg_fp, reg_ttc),
+        ]
+        for fp_b, is_ttc_b in bold_candidates:
+            if not fp_b or not os.path.exists(fp_b): continue
+            try:
+                if is_ttc_b:
+                    pdfmetrics.registerFont(TTFont("CNFontBold", fp_b, subfontIndex=0))
+                else:
+                    pdfmetrics.registerFont(TTFont("CNFontBold", fp_b))
+                break
+            except Exception:
+                continue
 
         out_dir = r"D:\lifeplanner\recording"
         os.makedirs(out_dir, exist_ok=True)
@@ -1762,17 +2126,17 @@ class App:
         c_toolbar= rc.HexColor("#FFF0DC")
         c_border = rc.HexColor("#F0E0D0")
 
-        def S(nm, sz, align=0, color=None, before=0, after=5):
-            return ParagraphStyle(nm, fontName="CNFont", fontSize=sz,
+        def S(nm, sz, align=0, color=None, before=0, after=5, font="CNFont"):
+            return ParagraphStyle(nm, fontName=font, fontSize=sz,
                                   textColor=color or c_text, alignment=align,
                                   spaceBefore=before, spaceAfter=after,
                                   leading=sz * 1.65)
 
-        s_title = S("T",  28, align=1, before=50, after=10, color=c_text)
+        s_title = S("T",  28, align=1, before=50, after=10, color=c_text, font="CNFontBold")
         s_sub   = S("Su", 13, align=1, after=6,  color=c_textg)
-        s_h1    = S("H1", 17, before=4, after=4, color=c_text)
-        s_h2    = S("H2", 13, before=2, after=2, color=c_text)
-        s_h3    = S("H3", 11, before=6, after=3, color=c_text)
+        s_h1    = S("H1", 17, before=4, after=4, color=c_text, font="CNFontBold")
+        s_h2    = S("H2", 13, before=2, after=2, color=c_text, font="CNFontBold")
+        s_h3    = S("H3", 11, before=6, after=3, color=c_text, font="CNFontBold")
         s_body  = S("B",  10, after=4, color=c_text)
         s_meta  = S("M",   9, after=6, color=c_textg)
 
@@ -1826,6 +2190,17 @@ class App:
             try: all_years.add(int(t["period"][:4]))
             except: pass
 
+        # Apply date-range filter to years
+        if start_dt or end_dt:
+            _s = start_dt or date.min
+            _e = end_dt   or date.max
+            all_years = {y for y in all_years
+                         if date(y, 1, 1) <= _e and date(y, 12, 31) >= _s}
+
+        def in_range(ds, de):
+            if start_dt is None and end_dt is None: return True
+            return ds <= (end_dt or date.max) and de >= (start_dt or date.min)
+
         if not all_years:
             messagebox.showinfo("提示", "暂无可导出的数据！"); return
 
@@ -1844,6 +2219,11 @@ class App:
         for year in sorted(all_years, reverse=True):
             yr_story = []; has = False
 
+            show_yr_level = (
+                (start_dt is None or start_dt <= date(year, 1, 1)) and
+                (end_dt   is None or end_dt   >= date(year, 12, 31))
+            )
+
             # Year header
             yr_story.append(hdr(f"{year} 年", c_accent, s_h1, body_w))
             yr_story.append(Spacer(1, 0.25*cm))
@@ -1852,7 +2232,7 @@ class App:
             yr_th = sorted([t for t in thoughts
                             if t["type"] == "year" and t["period"] == str(year)],
                            key=lambda x: x["created"])
-            if yr_th:
+            if show_yr_level and yr_th:
                 has = True
                 yr_story.append(hdr("年计划", c_lav, s_h2, body_w))
                 yr_story.append(Spacer(1, 0.1*cm))
@@ -1869,7 +2249,7 @@ class App:
                        if t.get("done")]
             yr_wt   = [e for e in weight_data if e["date"].startswith(str(year))]
 
-            if yr_done or yr_ref or yr_wt:
+            if show_yr_level and (yr_done or yr_ref or yr_wt):
                 has = True
                 yr_story.append(hdr("年总结", c_green, s_h2, body_w))
                 yr_story.append(Spacer(1, 0.1*cm))
@@ -1975,6 +2355,9 @@ class App:
                 mek = f"{year}-{month:02d}-{cal_mod.monthrange(year, month)[1]:02d}"
                 m_done = [t for t in tasks_in(msk, mek) if t.get("done")]
 
+                if not in_range(date(year, month, 1),
+                                date(year, month, cal_mod.monthrange(year, month)[1])):
+                    continue
                 if not mth and not mref and not m_done: continue
                 has = True
                 yr_story.append(hdr(f"{month} 月", c_toolbar, s_h2, body_w))
@@ -2009,6 +2392,8 @@ class App:
 
             while d_.year == year:
                 wend    = d_ + timedelta(6)
+                if not in_range(d_, wend):
+                    d_ += timedelta(7); continue
                 wperiod = f"{year}-W{d_.isocalendar()[1]:02d}"
                 wref    = get_ref(f"w_{dk(d_)}")
                 wth     = sorted([t for t in thoughts
