@@ -12,7 +12,9 @@ import calendar as cal_mod
 # ================================================================
 # DATA FILE
 # ================================================================
-DATA_FILE = os.path.join(os.path.expanduser("~"), "Documents", "lifeplanner_data.json")
+_onedrive = os.environ.get("OneDriveConsumer") or os.environ.get("OneDrive")
+DATA_FILE = os.path.join(_onedrive, "lifeplanner_data.json") if _onedrive else \
+            os.path.join(os.path.expanduser("~"), "Documents", "lifeplanner_data.json")
 
 # ================================================================
 # THEME COLORS
