@@ -34,7 +34,3 @@ pythonw LifePlanner.py
 ```powershell
 powershell -ExecutionPolicy Bypass -File migrate_data.ps1
 ```
-
-## 第二次更新
-添加了胡思乱想模块，是用来写年计划月计划和周计划的地方。
-添加了可以导出pdf的模块，会把计划和总结输出成pdf到文件夹里的recording文件夹中。
