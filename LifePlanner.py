@@ -1630,11 +1630,10 @@ class App:
                          font=(self.FONT, 9)).pack(side="left")
                 tk.Label(top, text=period_label(item["type"], item["period"]),
                          bg=PINK, fg=PINK3, font=(self.FONT, 11, "bold")).pack(side="right")
-                preview = item["content"][:70] + ("…" if len(item["content"]) > 70 else "")
-                c_lbl = tk.Label(card, text=preview, bg=PINK, fg=TEXT,
-                                 font=(self.FONT, 11), anchor="w", justify="left",
-                                 wraplength=230)
-                c_lbl.pack(anchor="w", pady=(4, 0))
+                c_lbl = tk.Label(card, text=item["content"], bg=PINK, fg=TEXT,
+                                 font=(self.FONT, 11), anchor="w", justify="left")
+                c_lbl.pack(fill="x", anchor="w", pady=(4, 0))
+                c_lbl.bind("<Configure>", lambda e, l=c_lbl: l.configure(wraplength=e.width - 6))
                 def on_dbl(e, it=item):
                     self._open_thought_edit(it, refresh_list)
                 for w in (card, top, c_lbl):
