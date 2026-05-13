@@ -211,7 +211,7 @@ def thoughts_by_type(type_):
 
 # ─── FINANCE (记账) ─────────────────────────────────────────
 FINANCE_INCOME_CATS  = ["工资", "其他"]
-FINANCE_EXPENSE_CATS = ["饮食", "娱乐", "人情", "生活", "服饰"]
+FINANCE_EXPENSE_CATS = ["饮食", "娱乐", "人情", "生活", "服饰", "其他"]
 
 def finance_add(ftype, category, amount, date_str, note):
     d = _load()
@@ -729,6 +729,7 @@ class App:
                  f"支出 ¥{exp:.2f}", f"结余 {sign}¥{bal:.2f}"]
         for lb, t in zip(self._fin_lbls, texts):
             lb.configure(text=t)
+        self._fin_lbls[3].configure(font=(self.FONT, 12, "bold"))
 
     # ─── CALENDAR ───────────────────────────────────────────────
     def _render_cal(self):
@@ -1766,6 +1767,7 @@ class App:
         win = tk.Toplevel(self.root)
         win.title("💰 记账本")
         win.configure(bg=BG)
+        win.option_add('*TCombobox*Listbox.font', (self.FONT, 14))
         win.resizable(True, True)
         win.grab_set()
         self._center(win, 1000, 700)
@@ -1807,7 +1809,7 @@ class App:
         tk.Label(sum_frame, textvariable=sum_exp_v, bg="#FFF8EE", fg="#D32F2F",
                  font=(self.FONT, 11, "bold")).pack(anchor="w")
         tk.Label(sum_frame, textvariable=sum_bal_v, bg="#FFF8EE", fg=TEXT,
-                 font=(self.FONT, 12, "bold")).pack(anchor="w")
+                 font=(self.FONT, 13, "bold")).pack(anchor="w")
 
         # ── Right Panel (Input) ──
         right_card = RCard(main, r=16, bg=CARD)
@@ -1826,7 +1828,7 @@ class App:
         ms_frame.pack(fill="x", padx=12, pady=(12, 8))
         ms_var = tk.StringVar()
         tk.Label(ms_frame, textvariable=ms_var, bg=GREEN, fg=TEXT,
-                 font=(self.FONT, 11), justify="left", anchor="w").pack(fill="x")
+                 font=(self.FONT, 12, "bold"), justify="left", anchor="w").pack(fill="x")
 
         tk.Label(right_card.inner, text="💰 添加记录", bg=CARD, fg=TEXT,
                  font=(self.FONT, 14, "bold")).pack(anchor="w", padx=20, pady=(4, 6))
@@ -1835,7 +1837,7 @@ class App:
         rf.pack(fill="x")
 
         tk.Label(rf, text="收支类型", bg=CARD, fg=TEXTG,
-                 font=(self.FONT, 11, "bold")).pack(anchor="w")
+                 font=(self.FONT, 13, "bold")).pack(anchor="w")
         ft_frame = tk.Frame(rf, bg=CARD)
         ft_frame.pack(fill="x", pady=(2, 6))
         ft_var = tk.StringVar(value="expense")
@@ -1854,48 +1856,48 @@ class App:
 
         for ft, flbl in [("income", "存入"), ("expense", "支出")]:
             b = tk.Label(ft_frame, text=flbl, bg="#FFF8EE", fg=TEXTG,
-                         font=(self.FONT, 12, "bold"), padx=12, pady=5, cursor="hand2")
+                         font=(self.FONT, 14, "bold"), padx=12, pady=5, cursor="hand2")
             b.pack(side="left", fill="x", expand=True, padx=2)
             b.bind("<Button-1>", lambda e, t=ft: (ft_var.set(t), upd_ft()))
             ft_btns[ft] = b
 
         tk.Label(rf, text="日期", bg=CARD, fg=TEXTG,
-                 font=(self.FONT, 11, "bold")).pack(anchor="w")
+                 font=(self.FONT, 13, "bold")).pack(anchor="w")
         d_frame = tk.Frame(rf, bg=CARD)
         d_frame.pack(fill="x", pady=(2, 6))
-        entry_kw = dict(font=(self.FONT, 11), relief="flat", bg="#FFF8EE", fg=TEXT,
+        entry_kw = dict(font=(self.FONT, 13), relief="flat", bg="#FFF8EE", fg=TEXT,
                         bd=1, highlightthickness=1, highlightbackground=BORDER)
         yr_var = tk.StringVar(value=str(today.year))
         mo_var = tk.StringVar(value=str(today.month))
         dy_var = tk.StringVar(value=str(today.day))
         tk.Entry(d_frame, textvariable=yr_var, width=5, **entry_kw).pack(side="left")
-        tk.Label(d_frame, text="年", bg=CARD, fg=TEXTG, font=(self.FONT, 10)).pack(side="left", padx=(1, 4))
+        tk.Label(d_frame, text="年", bg=CARD, fg=TEXTG, font=(self.FONT, 12)).pack(side="left", padx=(1, 4))
         ttk.Combobox(d_frame, textvariable=mo_var, values=[str(m) for m in range(1, 13)],
-                     state="readonly", width=3, font=(self.FONT, 11)).pack(side="left")
-        tk.Label(d_frame, text="月", bg=CARD, fg=TEXTG, font=(self.FONT, 10)).pack(side="left", padx=(1, 4))
+                     state="readonly", width=3, font=(self.FONT, 14)).pack(side="left")
+        tk.Label(d_frame, text="月", bg=CARD, fg=TEXTG, font=(self.FONT, 12)).pack(side="left", padx=(1, 4))
         ttk.Combobox(d_frame, textvariable=dy_var, values=[str(d2) for d2 in range(1, 32)],
-                     state="readonly", width=3, font=(self.FONT, 11)).pack(side="left")
-        tk.Label(d_frame, text="日", bg=CARD, fg=TEXTG, font=(self.FONT, 10)).pack(side="left", padx=(1, 0))
+                     state="readonly", width=3, font=(self.FONT, 14)).pack(side="left")
+        tk.Label(d_frame, text="日", bg=CARD, fg=TEXTG, font=(self.FONT, 12)).pack(side="left", padx=(1, 0))
 
         tk.Label(rf, text="金额", bg=CARD, fg=TEXTG,
-                 font=(self.FONT, 11, "bold")).pack(anchor="w")
+                 font=(self.FONT, 13, "bold")).pack(anchor="w")
         a_frame = tk.Frame(rf, bg=CARD)
         a_frame.pack(fill="x", pady=(2, 6))
-        amt_e = tk.Entry(a_frame, font=(self.FONT, 12, "bold"), relief="flat",
+        amt_e = tk.Entry(a_frame, font=(self.FONT, 14, "bold"), relief="flat",
                          bg="#FFF8EE", fg=TEXT, bd=1, width=10,
                          highlightthickness=1, highlightbackground=BORDER)
         amt_e.pack(side="left", ipady=3)
-        tk.Label(a_frame, text="元", bg=CARD, fg=TEXTG, font=(self.FONT, 11)).pack(side="left", padx=4)
+        tk.Label(a_frame, text="元", bg=CARD, fg=TEXTG, font=(self.FONT, 13)).pack(side="left", padx=4)
 
         tk.Label(rf, text="分类", bg=CARD, fg=TEXTG,
-                 font=(self.FONT, 11, "bold")).pack(anchor="w")
+                 font=(self.FONT, 13, "bold")).pack(anchor="w")
         cat_cb = ttk.Combobox(rf, textvariable=cat_var, state="readonly",
-                              width=10, font=(self.FONT, 11))
+                              width=10, font=(self.FONT, 14))
         cat_cb.pack(anchor="w", pady=(2, 6))
 
         tk.Label(rf, text="备注", bg=CARD, fg=TEXTG,
-                 font=(self.FONT, 11, "bold")).pack(anchor="w")
-        note_e = tk.Entry(rf, font=(self.FONT, 11), relief="flat",
+                 font=(self.FONT, 13, "bold")).pack(anchor="w")
+        note_e = tk.Entry(rf, font=(self.FONT, 13), relief="flat",
                           bg="#FFF8EE", fg=TEXT, bd=1,
                           highlightthickness=1, highlightbackground=BORDER)
         note_e.pack(fill="x", pady=(2, 8), ipady=3)
@@ -2035,6 +2037,7 @@ class App:
         pop = tk.Toplevel(self.root)
         pop.title("编辑记录")
         pop.configure(bg=CARD); pop.resizable(False, False); pop.grab_set()
+        pop.option_add('*TCombobox*Listbox.font', (self.FONT, 12))
         self._center(pop, 380, 460)
 
         tk.Label(pop, text="✏️ 编辑记录", bg=CARD, fg=TEXT,
@@ -2077,7 +2080,7 @@ class App:
         ae.insert(0, str(item["amount"]))
 
         tk.Label(f, text="分类", bg=CARD, fg=TEXTG, font=(self.FONT, 11, "bold")).pack(anchor="w")
-        cc = ttk.Combobox(f, textvariable=cat_v, state="readonly", width=10, font=(self.FONT, 11))
+        cc = ttk.Combobox(f, textvariable=cat_v, state="readonly", width=10, font=(self.FONT, 12))
         cc.pack(anchor="w", pady=(2, 6))
 
         tk.Label(f, text="备注", bg=CARD, fg=TEXTG, font=(self.FONT, 11, "bold")).pack(anchor="w")
@@ -2150,12 +2153,13 @@ class App:
         win = tk.Toplevel(export_win)
         win.title("年导出"); win.configure(bg=CARD)
         win.resizable(False, False); win.grab_set()
+        win.option_add('*TCombobox*Listbox.font', (self.FONT, 13))
         self._center(win, 280, 200)
         tk.Label(win, text="选择年份", bg=CARD, fg=TEXT,
                  font=(self.FONT, 14, "bold")).pack(pady=(18, 8))
         var = tk.StringVar(value=str(years[-1]))
         ttk.Combobox(win, textvariable=var, values=[str(y) for y in reversed(years)],
-                     state="readonly", width=10, font=(self.FONT, 12)).pack(pady=4)
+                     state="readonly", width=10, font=(self.FONT, 13)).pack(pady=4)
         def do_export():
             y = int(var.get())
             if messagebox.askyesno("确认", f"是否导出 {y} 年的记账记录？", parent=win):
@@ -2176,6 +2180,7 @@ class App:
         win = tk.Toplevel(export_win)
         win.title("月导出"); win.configure(bg=CARD)
         win.resizable(False, False); win.grab_set()
+        win.option_add('*TCombobox*Listbox.font', (self.FONT, 13))
         self._center(win, 300, 220)
         tk.Label(win, text="选择月份", bg=CARD, fg=TEXT,
                  font=(self.FONT, 14, "bold")).pack(pady=(18, 8))
@@ -2183,10 +2188,10 @@ class App:
         yr_v = tk.StringVar(value=str(years[-1]))
         mo_v = tk.StringVar(value="1")
         ttk.Combobox(row, textvariable=yr_v, values=[str(y) for y in reversed(years)],
-                     state="readonly", width=7, font=(self.FONT, 12)).pack(side="left", padx=3)
+                     state="readonly", width=7, font=(self.FONT, 13)).pack(side="left", padx=3)
         tk.Label(row, text="年", bg=CARD, fg=TEXT, font=(self.FONT, 12)).pack(side="left")
         ttk.Combobox(row, textvariable=mo_v, values=[str(m) for m in range(1, 13)],
-                     state="readonly", width=4, font=(self.FONT, 12)).pack(side="left", padx=3)
+                     state="readonly", width=4, font=(self.FONT, 13)).pack(side="left", padx=3)
         tk.Label(row, text="月", bg=CARD, fg=TEXT, font=(self.FONT, 12)).pack(side="left")
         def do_export():
             y = int(yr_v.get()); m = int(mo_v.get())
@@ -2321,7 +2326,7 @@ class App:
         s_sub     = S("FSub",13, align=1, after=6, color=c_textg)
         s_year    = S("FYr", 20, before=12, after=6, font="CNFontBold")
         s_month   = S("FMo", 16, before=8,  after=4, font="CNFontBold")
-        s_summary = S("FSum",13, before=4,  after=3, font="CNFontBold")
+        s_summary = S("FSum",14, before=4,  after=3, font="CNFontBold")
         s_cattot  = S("FCt", 11, before=2,  after=2)
         s_ai      = S("FAI", 10, color=c_inc)
         s_ae      = S("FAE", 10, color=c_exp)
