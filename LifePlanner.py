@@ -2370,14 +2370,17 @@ class App:
                 exp = sum(r["amount"] for r in mr if r["ftype"] == "expense")
                 bal = inc - exp
                 sign = "+" if bal >= 0 else ""
-                story.append(Paragraph(
-                    f"收入: ¥{inc:.2f}    支出: ¥{exp:.2f}    结余: {sign}¥{bal:.2f}",
-                    s_summary))
-                cat_totals = defaultdict(float)
-                for r in mr: cat_totals[r["category"]] += r["amount"]
-                parts = [f"{c}: ¥{v:.2f}" for c, v in cat_totals.items()]
-                if parts:
-                    story.append(Paragraph("    ".join(parts), s_cattot))
+                story.append(Paragraph(f"收入: ¥{inc:.2f}", s_summary))
+                story.append(Paragraph(f"支出: ¥{exp:.2f}", s_summary))
+                story.append(Paragraph(f"结余: {sign}¥{bal:.2f}", s_summary))
+                cat_totals = {}
+                for r in mr:
+                    cat = r["category"]
+                    if cat == "其他":
+                        cat = "收入其他" if r["ftype"] == "income" else "支出其他"
+                    cat_totals[cat] = cat_totals.get(cat, 0) + r["amount"]
+                for c, v in cat_totals.items():
+                    story.append(Paragraph(f"{c}: ¥{v:.2f}", s_cattot))
                 t = Table([[""]], colWidths=[body_w], rowHeights=[2])
                 t.setStyle(TableStyle([
                     ("LINEBELOW", (0,0), (-1,0), 1.5, c_border),
