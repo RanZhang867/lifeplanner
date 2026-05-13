@@ -53,17 +53,17 @@ WEEKDAY_CN = ["星期一", "星期二", "星期三", "星期四", "星期五", "
 # ================================================================
 def _load():
     if not os.path.exists(DATA_FILE):
-        return {"tasks": {}, "countdowns": [], "weight": [], "summaries": {}, "thoughts": []}
+        return {"tasks": {}, "countdowns": [], "weight": [], "summaries": {}, "thoughts": [], "finance": []}
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             d = json.load(f)
             for k in ("tasks", "summaries"):
                 if k not in d: d[k] = {}
-            for k in ("countdowns", "weight", "thoughts"):
+            for k in ("countdowns", "weight", "thoughts", "finance"):
                 if k not in d: d[k] = []
             return d
     except:
-        return {"tasks": {}, "countdowns": [], "weight": [], "summaries": {}, "thoughts": []}
+        return {"tasks": {}, "countdowns": [], "weight": [], "summaries": {}, "thoughts": [], "finance": []}
 
 def _save(d):
     os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
@@ -208,6 +208,38 @@ def thought_del(tid):
 
 def thoughts_by_type(type_):
     return [t for t in _load()["thoughts"] if t["type"] == type_]
+
+# ─── FINANCE (记账) ─────────────────────────────────────────
+FINANCE_INCOME_CATS  = ["工资", "其他"]
+FINANCE_EXPENSE_CATS = ["饮食", "娱乐", "人情", "生活", "服饰"]
+
+def finance_add(ftype, category, amount, date_str, note):
+    d = _load()
+    d["finance"].append({"id": uuid.uuid4().hex[:8], "ftype": ftype,
+                          "category": category, "amount": float(amount),
+                          "date": date_str, "note": note})
+    _save(d)
+
+def finance_del(fid):
+    d = _load(); d["finance"] = [f for f in d["finance"] if f["id"] != fid]; _save(d)
+
+def finance_edit(fid, ftype, category, amount, date_str, note):
+    d = _load()
+    for f in d["finance"]:
+        if f["id"] == fid:
+            f["ftype"] = ftype; f["category"] = category
+            f["amount"] = float(amount); f["date"] = date_str; f["note"] = note
+    _save(d)
+
+def finance_all():
+    return list(_load()["finance"])
+
+def finance_in_range(start_key, end_key):
+    return [f for f in _load()["finance"] if start_key <= f["date"] <= end_key]
+
+def finance_for_month(year, month):
+    prefix = f"{year}-{month:02d}"
+    return [f for f in _load()["finance"] if f["date"].startswith(prefix)]
 
 # ─── WEIGHT ──────────────────────────────────────────────────────
 def weight_add(w, ws):
@@ -450,7 +482,8 @@ class App:
         self.right.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
         self.right.columnconfigure(0, weight=1)
         self.right.rowconfigure(0, weight=2)   # Todo top
-        self.right.rowconfigure(1, weight=1)   # Weight bottom
+        self.right.rowconfigure(1, weight=0)   # Finance summary (fixed)
+        self.right.rowconfigure(2, weight=1)   # Weight bottom
 
         self._build_left()
         self._build_right()
@@ -461,6 +494,7 @@ class App:
         tk.Label(tb, text="🌸 生活规划本", bg=TOOLBAR, fg=TEXT,
                  font=(self.FONT, 19, "bold")).pack(side="left", padx=(14, 12))
         specs = [
+            ("💰 记账",       "#D4EDDA", "#B1DFBB",   self._open_finance),
             ("💭 胡思乱想",  LAV,     "#D8C8F8",       self._open_thoughts),
             ("📤 导出记录",  GREEN,   GREEN2,           self._open_export_dialog),
             ("📝添加日程",   ACCENT,  ACCENT2,         self._open_add_task),
@@ -555,9 +589,20 @@ class App:
         self._todo_scroll.grid(row=3, column=0, sticky="nsew", padx=8, pady=(0, 8))
         self._todo_frame = self._todo_scroll.inner
 
+        # ── Finance Summary (one-line strip) ─────────────────────
+        fin_bar = tk.Frame(self.right, bg="#D4EDDA", pady=4)
+        fin_bar.grid(row=1, column=0, sticky="ew", pady=(3, 3))
+        for i in range(4): fin_bar.columnconfigure(i, weight=1)
+        self._fin_lbls = []
+        for i in range(4):
+            lb = tk.Label(fin_bar, text="", bg="#D4EDDA", fg=TEXT,
+                          font=(self.FONT, 11))
+            lb.grid(row=0, column=i, sticky="ew")
+            self._fin_lbls.append(lb)
+
         # ── Weight RCard (bottom, full width) ────────────────────
         weight_card = RCard(self.right, r=16, bg=CARD)
-        weight_card.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
+        weight_card.grid(row=2, column=0, sticky="nsew", pady=(6, 0))
         weight_card.inner.columnconfigure(0, weight=1)
         weight_card.inner.rowconfigure(2, weight=1)  # charts row expands
 
@@ -635,6 +680,7 @@ class App:
         self._render_todo()
         self._render_cds()
         self._render_date_display()
+        self._render_finance_summary()
         self.root.after(200, self._render_weight)
 
     def _on_resize(self, event):
@@ -670,6 +716,19 @@ class App:
         sub_str = f"今日待办: {total} 件   ·   已完成: {done} 件"
         self._date_big_lbl.configure(text=date_str)
         self._date_sub_lbl.configure(text=sub_str)
+
+    # ─── FINANCE SUMMARY (主界面) ───────────────────────────────
+    def _render_finance_summary(self):
+        today = date.today()
+        recs = finance_for_month(today.year, today.month)
+        inc = sum(r["amount"] for r in recs if r["ftype"] == "income")
+        exp = sum(r["amount"] for r in recs if r["ftype"] == "expense")
+        bal = inc - exp
+        sign = "+" if bal >= 0 else ""
+        texts = [f"💰 {today.month}月", f"收入 ¥{inc:.2f}",
+                 f"支出 ¥{exp:.2f}", f"结余 {sign}¥{bal:.2f}"]
+        for lb, t in zip(self._fin_lbls, texts):
+            lb.configure(text=t)
 
     # ─── CALENDAR ───────────────────────────────────────────────
     def _render_cal(self):
@@ -1699,6 +1758,673 @@ class App:
         del_btn.pack(side="left", fill="x", expand=True, padx=(4, 0))
         hover_bind(del_btn, "#FFD0D0", "#FFEEEE")
         pop.bind("<Escape>", lambda e: pop.destroy())
+
+    # ──────────────────────────────────────────────────────────────
+    # FINANCE (记账) DIALOG
+    # ──────────────────────────────────────────────────────────────
+    def _open_finance(self):
+        win = tk.Toplevel(self.root)
+        win.title("💰 记账本")
+        win.configure(bg=BG)
+        win.resizable(True, True)
+        win.grab_set()
+        self._center(win, 1000, 700)
+
+        today = date.today()
+        state = {"tab": "month", "off": 0}
+
+        main = tk.Frame(win, bg=BG)
+        main.pack(fill="both", expand=True, padx=10, pady=10)
+        main.columnconfigure(0, weight=1)
+        main.columnconfigure(1, weight=1)
+        main.rowconfigure(0, weight=1)
+
+        # ── Left Panel (History) ──
+        left_card = RCard(main, r=16, bg=CARD)
+        left_card.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
+        left_card.inner.columnconfigure(0, weight=1)
+        left_card.inner.rowconfigure(2, weight=1)
+
+        tab_row = tk.Frame(left_card.inner, bg=CARD)
+        tab_row.grid(row=0, column=0, sticky="ew", padx=8, pady=(10, 4))
+        tab_btns = {}
+
+        nav_row = tk.Frame(left_card.inner, bg=CARD)
+        nav_row.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 4))
+        period_var = tk.StringVar()
+
+        list_scroll = ScrollFrame(left_card.inner, bg=CARD)
+        list_scroll.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 4))
+        list_frame = list_scroll.inner
+
+        sum_frame = tk.Frame(left_card.inner, bg="#FFF8EE", padx=10, pady=8)
+        sum_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=(0, 8))
+        sum_inc_v = tk.StringVar(value="收入: ¥0.00")
+        sum_exp_v = tk.StringVar(value="支出: ¥0.00")
+        sum_bal_v = tk.StringVar(value="结余: ¥0.00")
+        tk.Label(sum_frame, textvariable=sum_inc_v, bg="#FFF8EE", fg="#2E7D32",
+                 font=(self.FONT, 11, "bold")).pack(anchor="w")
+        tk.Label(sum_frame, textvariable=sum_exp_v, bg="#FFF8EE", fg="#D32F2F",
+                 font=(self.FONT, 11, "bold")).pack(anchor="w")
+        tk.Label(sum_frame, textvariable=sum_bal_v, bg="#FFF8EE", fg=TEXT,
+                 font=(self.FONT, 12, "bold")).pack(anchor="w")
+
+        # ── Right Panel (Input) ──
+        right_card = RCard(main, r=16, bg=CARD)
+        right_card.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+        right_card.inner.columnconfigure(0, weight=1)
+
+        export_f = tk.Frame(right_card.inner, bg=CARD)
+        export_f.pack(side="bottom", fill="x", padx=12, pady=(0, 10))
+        exp_btn = clickable_label(export_f, "📤 导出记录", GREEN, TEXT,
+                                  (self.FONT, 11, "bold"),
+                                  lambda: self._open_finance_export(win), 10, 6)
+        exp_btn.pack(side="right")
+        hover_bind(exp_btn, GREEN2, GREEN)
+
+        ms_frame = tk.Frame(right_card.inner, bg=GREEN, padx=12, pady=8)
+        ms_frame.pack(fill="x", padx=12, pady=(12, 8))
+        ms_var = tk.StringVar()
+        tk.Label(ms_frame, textvariable=ms_var, bg=GREEN, fg=TEXT,
+                 font=(self.FONT, 11), justify="left", anchor="w").pack(fill="x")
+
+        tk.Label(right_card.inner, text="💰 添加记录", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 14, "bold")).pack(anchor="w", padx=20, pady=(4, 6))
+
+        rf = tk.Frame(right_card.inner, bg=CARD, padx=20)
+        rf.pack(fill="x")
+
+        tk.Label(rf, text="收支类型", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11, "bold")).pack(anchor="w")
+        ft_frame = tk.Frame(rf, bg=CARD)
+        ft_frame.pack(fill="x", pady=(2, 6))
+        ft_var = tk.StringVar(value="expense")
+        ft_btns = {}
+        cat_var = tk.StringVar()
+
+        def upd_ft():
+            for ft, b in ft_btns.items():
+                sel = ft_var.get() == ft
+                b.configure(bg=(GREEN if ft == "income" else PINK2) if sel else "#FFF8EE",
+                            fg=TEXT if sel else TEXTG)
+            cats = FINANCE_INCOME_CATS if ft_var.get() == "income" else FINANCE_EXPENSE_CATS
+            cat_cb["values"] = cats
+            if cat_var.get() not in cats:
+                cat_var.set(cats[0])
+
+        for ft, flbl in [("income", "存入"), ("expense", "支出")]:
+            b = tk.Label(ft_frame, text=flbl, bg="#FFF8EE", fg=TEXTG,
+                         font=(self.FONT, 12, "bold"), padx=12, pady=5, cursor="hand2")
+            b.pack(side="left", fill="x", expand=True, padx=2)
+            b.bind("<Button-1>", lambda e, t=ft: (ft_var.set(t), upd_ft()))
+            ft_btns[ft] = b
+
+        tk.Label(rf, text="日期", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11, "bold")).pack(anchor="w")
+        d_frame = tk.Frame(rf, bg=CARD)
+        d_frame.pack(fill="x", pady=(2, 6))
+        entry_kw = dict(font=(self.FONT, 11), relief="flat", bg="#FFF8EE", fg=TEXT,
+                        bd=1, highlightthickness=1, highlightbackground=BORDER)
+        yr_var = tk.StringVar(value=str(today.year))
+        mo_var = tk.StringVar(value=str(today.month))
+        dy_var = tk.StringVar(value=str(today.day))
+        tk.Entry(d_frame, textvariable=yr_var, width=5, **entry_kw).pack(side="left")
+        tk.Label(d_frame, text="年", bg=CARD, fg=TEXTG, font=(self.FONT, 10)).pack(side="left", padx=(1, 4))
+        ttk.Combobox(d_frame, textvariable=mo_var, values=[str(m) for m in range(1, 13)],
+                     state="readonly", width=3, font=(self.FONT, 11)).pack(side="left")
+        tk.Label(d_frame, text="月", bg=CARD, fg=TEXTG, font=(self.FONT, 10)).pack(side="left", padx=(1, 4))
+        ttk.Combobox(d_frame, textvariable=dy_var, values=[str(d2) for d2 in range(1, 32)],
+                     state="readonly", width=3, font=(self.FONT, 11)).pack(side="left")
+        tk.Label(d_frame, text="日", bg=CARD, fg=TEXTG, font=(self.FONT, 10)).pack(side="left", padx=(1, 0))
+
+        tk.Label(rf, text="金额", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11, "bold")).pack(anchor="w")
+        a_frame = tk.Frame(rf, bg=CARD)
+        a_frame.pack(fill="x", pady=(2, 6))
+        amt_e = tk.Entry(a_frame, font=(self.FONT, 12, "bold"), relief="flat",
+                         bg="#FFF8EE", fg=TEXT, bd=1, width=10,
+                         highlightthickness=1, highlightbackground=BORDER)
+        amt_e.pack(side="left", ipady=3)
+        tk.Label(a_frame, text="元", bg=CARD, fg=TEXTG, font=(self.FONT, 11)).pack(side="left", padx=4)
+
+        tk.Label(rf, text="分类", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11, "bold")).pack(anchor="w")
+        cat_cb = ttk.Combobox(rf, textvariable=cat_var, state="readonly",
+                              width=10, font=(self.FONT, 11))
+        cat_cb.pack(anchor="w", pady=(2, 6))
+
+        tk.Label(rf, text="备注", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11, "bold")).pack(anchor="w")
+        note_e = tk.Entry(rf, font=(self.FONT, 11), relief="flat",
+                          bg="#FFF8EE", fg=TEXT, bd=1,
+                          highlightthickness=1, highlightbackground=BORDER)
+        note_e.pack(fill="x", pady=(2, 8), ipady=3)
+
+        upd_ft()
+
+        def upd_ms():
+            try:
+                y = int(yr_var.get()); m = int(mo_var.get())
+            except (ValueError, TypeError):
+                y, m = today.year, today.month
+            recs = finance_for_month(y, m)
+            inc = sum(r["amount"] for r in recs if r["ftype"] == "income")
+            exp = sum(r["amount"] for r in recs if r["ftype"] == "expense")
+            bal = inc - exp
+            sign = "+" if bal >= 0 else ""
+            ms_var.set(f"📊 {y}年{m}月  |  收入: ¥{inc:.2f}  支出: ¥{exp:.2f}  结余: {sign}¥{bal:.2f}")
+
+        def get_range():
+            t, off = state["tab"], state["off"]
+            if t == "year":
+                y = today.year + off
+                return f"{y}-01-01", f"{y}-12-31", f"{y}年"
+            elif t == "month":
+                y = today.year + ((today.month - 1 + off) // 12)
+                m = (today.month - 1 + off) % 12 + 1
+                last = cal_mod.monthrange(y, m)[1]
+                return f"{y}-{m:02d}-01", f"{y}-{m:02d}-{last:02d}", f"{y}年{m}月"
+            else:
+                mon = monday_of(today) + timedelta(weeks=off)
+                sun = mon + timedelta(6)
+                return dk(mon), dk(sun), f"{mon.month}月{mon.day}日—{sun.month}月{sun.day}日"
+
+        def refresh():
+            sk, ek, label = get_range()
+            period_var.set(label)
+            for tid, b in tab_btns.items():
+                b.configure(bg=ACCENT if state["tab"] == tid else "#FFF8EE",
+                            fg=TEXT if state["tab"] == tid else TEXTG)
+            records = sorted(finance_in_range(sk, ek), key=lambda r: r["date"])
+            for w in list_frame.winfo_children(): w.destroy()
+            if not records:
+                tk.Label(list_frame, text="暂无记录~", bg=CARD, fg=TEXTL,
+                         font=(self.FONT, 12)).pack(pady=30)
+            else:
+                for r in records:
+                    is_inc = r["ftype"] == "income"
+                    rbg = "#F0FFF0" if is_inc else "#FFF5F5"
+                    row = tk.Frame(list_frame, bg=rbg, pady=4, padx=8)
+                    row.pack(fill="x", pady=2, padx=4)
+                    top = tk.Frame(row, bg=rbg); top.pack(fill="x")
+                    sign = "+" if is_inc else "-"
+                    clr = "#2E7D32" if is_inc else "#D32F2F"
+                    tk.Label(top, text=f"{sign}¥{r['amount']:.2f}",
+                             bg=rbg, fg=clr,
+                             font=(self.FONT, 12, "bold")).pack(side="left")
+                    cbg = GREEN if is_inc else PINK
+                    tk.Label(top, text=r["category"], bg=cbg, fg=TEXT,
+                             font=(self.FONT, 9), padx=4, pady=1).pack(side="left", padx=6)
+                    tk.Label(top, text=r["date"], bg=rbg, fg=TEXTG,
+                             font=(self.FONT, 9)).pack(side="right")
+                    if r.get("note"):
+                        tk.Label(row, text=f"📝 {r['note']}", bg=rbg, fg=TEXTG,
+                                 font=(self.FONT, 9), anchor="w").pack(fill="x", pady=(2, 0))
+                    def on_dbl(e, item=r):
+                        self._open_finance_edit(item, refresh)
+                    for w in row.winfo_children(): w.bind("<Double-Button-1>", on_dbl)
+                    row.bind("<Double-Button-1>", on_dbl)
+
+            def bind_scroll(w):
+                w.bind("<MouseWheel>", lambda e: list_scroll._c.yview_scroll(
+                    int(-1 * (e.delta / 120)), "units"))
+                for ch in w.winfo_children(): bind_scroll(ch)
+            bind_scroll(list_frame)
+
+            inc = sum(r["amount"] for r in records if r["ftype"] == "income")
+            exp = sum(r["amount"] for r in records if r["ftype"] == "expense")
+            bal = inc - exp
+            sign = "+" if bal >= 0 else ""
+            sum_inc_v.set(f"收入: ¥{inc:.2f}")
+            sum_exp_v.set(f"支出: ¥{exp:.2f}")
+            sum_bal_v.set(f"结余: {sign}¥{bal:.2f}")
+            upd_ms()
+            self._render_finance_summary()
+
+        def switch_tab(t):
+            state["tab"] = t; state["off"] = 0; refresh()
+
+        for tid, tlbl in [("year", "年"), ("month", "月"), ("week", "周")]:
+            b = clickable_label(tab_row, tlbl, "#FFF8EE", TEXTG,
+                                (self.FONT, 12, "bold"),
+                                lambda t=tid: switch_tab(t), 12, 5)
+            b.pack(side="left", fill="x", expand=True, padx=2)
+            hover_bind(b, ACCENT, "#FFF8EE")
+            tab_btns[tid] = b
+
+        prev_b = self._circle_btn(nav_row, "‹", BORDER, "#E0D0C0",
+            lambda: (state.__setitem__("off", state["off"] - 1), refresh()))
+        prev_b.pack(side="left")
+        tk.Label(nav_row, textvariable=period_var, bg=CARD, fg=TEXT,
+                 font=(self.FONT, 13, "bold"), width=18).pack(side="left", expand=True)
+        next_b = self._circle_btn(nav_row, "›", BORDER, "#E0D0C0",
+            lambda: (state.__setitem__("off", state["off"] + 1), refresh()))
+        next_b.pack(side="right")
+
+        def do_add():
+            try:
+                y = int(yr_var.get()); m = int(mo_var.get()); d2 = int(dy_var.get())
+                ds = f"{y}-{m:02d}-{d2:02d}"
+                date.fromisoformat(ds)
+            except (ValueError, TypeError):
+                messagebox.showwarning("提示", "请输入有效日期！", parent=win); return
+            amt = amt_e.get().strip()
+            if not amt:
+                messagebox.showwarning("提示", "请输入金额！", parent=win); return
+            try: amt_f = float(amt)
+            except ValueError:
+                messagebox.showwarning("提示", "请输入有效金额！", parent=win); return
+            cat = cat_var.get()
+            if not cat:
+                messagebox.showwarning("提示", "请选择分类！", parent=win); return
+            finance_add(ft_var.get(), cat, amt_f, ds, note_e.get().strip())
+            amt_e.delete(0, "end"); note_e.delete(0, "end")
+            refresh()
+
+        add_btn = clickable_label(rf, "添加记录  💰", ACCENT, TEXT,
+                                  (self.FONT, 13, "bold"), do_add, 0, 10)
+        add_btn.pack(fill="x", pady=(2, 0))
+        hover_bind(add_btn, ACCENT2, ACCENT)
+
+        yr_var.trace("w", lambda *_: upd_ms())
+        mo_var.trace("w", lambda *_: upd_ms())
+        refresh()
+        win.bind("<Escape>", lambda e: win.destroy())
+
+    def _open_finance_edit(self, item, refresh_fn):
+        pop = tk.Toplevel(self.root)
+        pop.title("编辑记录")
+        pop.configure(bg=CARD); pop.resizable(False, False); pop.grab_set()
+        self._center(pop, 380, 460)
+
+        tk.Label(pop, text="✏️ 编辑记录", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 16, "bold")).pack(pady=(16, 8))
+        f = tk.Frame(pop, bg=CARD, padx=20); f.pack(fill="x")
+
+        tk.Label(f, text="类型", bg=CARD, fg=TEXTG, font=(self.FONT, 11, "bold")).pack(anchor="w")
+        ft_f = tk.Frame(f, bg=CARD); ft_f.pack(fill="x", pady=(2, 6))
+        ft_v = tk.StringVar(value=item["ftype"])
+        ft_b = {}
+        cat_v = tk.StringVar(value=item["category"])
+
+        def upd_e():
+            for ft, b in ft_b.items():
+                sel = ft_v.get() == ft
+                b.configure(bg=(GREEN if ft == "income" else PINK2) if sel else "#FFF8EE",
+                            fg=TEXT if sel else TEXTG)
+            cats = FINANCE_INCOME_CATS if ft_v.get() == "income" else FINANCE_EXPENSE_CATS
+            cc["values"] = cats
+            if cat_v.get() not in cats: cat_v.set(cats[0])
+
+        for ft, flbl in [("income", "存入"), ("expense", "支出")]:
+            b = tk.Label(ft_f, text=flbl, bg="#FFF8EE", fg=TEXTG,
+                         font=(self.FONT, 11, "bold"), padx=8, pady=4, cursor="hand2")
+            b.pack(side="left", fill="x", expand=True, padx=2)
+            b.bind("<Button-1>", lambda e, t=ft: (ft_v.set(t), upd_e()))
+            ft_b[ft] = b
+
+        tk.Label(f, text="日期 (YYYY-MM-DD)", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11, "bold")).pack(anchor="w")
+        de = tk.Entry(f, font=(self.FONT, 12), relief="flat", bg="#FFF8EE", fg=TEXT,
+                      bd=1, highlightthickness=1, highlightbackground=BORDER)
+        de.pack(fill="x", pady=(2, 6), ipady=3)
+        de.insert(0, item["date"])
+
+        tk.Label(f, text="金额", bg=CARD, fg=TEXTG, font=(self.FONT, 11, "bold")).pack(anchor="w")
+        ae = tk.Entry(f, font=(self.FONT, 12), relief="flat", bg="#FFF8EE", fg=TEXT,
+                      bd=1, highlightthickness=1, highlightbackground=BORDER)
+        ae.pack(fill="x", pady=(2, 6), ipady=3)
+        ae.insert(0, str(item["amount"]))
+
+        tk.Label(f, text="分类", bg=CARD, fg=TEXTG, font=(self.FONT, 11, "bold")).pack(anchor="w")
+        cc = ttk.Combobox(f, textvariable=cat_v, state="readonly", width=10, font=(self.FONT, 11))
+        cc.pack(anchor="w", pady=(2, 6))
+
+        tk.Label(f, text="备注", bg=CARD, fg=TEXTG, font=(self.FONT, 11, "bold")).pack(anchor="w")
+        ne = tk.Entry(f, font=(self.FONT, 11), relief="flat", bg="#FFF8EE", fg=TEXT,
+                      bd=1, highlightthickness=1, highlightbackground=BORDER)
+        ne.pack(fill="x", pady=(2, 8), ipady=3)
+        if item.get("note"): ne.insert(0, item["note"])
+        upd_e()
+
+        bf = tk.Frame(f, bg=CARD); bf.pack(fill="x", pady=(0, 8))
+        def do_save():
+            ds = de.get().strip()
+            try: date.fromisoformat(ds)
+            except: messagebox.showwarning("提示", "日期格式错误！", parent=pop); return
+            try: av = float(ae.get().strip())
+            except: messagebox.showwarning("提示", "请输入有效金额！", parent=pop); return
+            finance_edit(item["id"], ft_v.get(), cat_v.get(), av, ds, ne.get().strip())
+            pop.destroy(); refresh_fn()
+        def do_del():
+            if messagebox.askyesno("确认", "删除这条记录？", parent=pop):
+                finance_del(item["id"]); pop.destroy(); refresh_fn()
+        save_b = clickable_label(bf, "💾 保存", GREEN, TEXT, (self.FONT, 11, "bold"), do_save, 0, 8)
+        save_b.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        hover_bind(save_b, GREEN2, GREEN)
+        del_b = clickable_label(bf, "🗑 删除", "#FFEEEE", URGENT, (self.FONT, 11, "bold"), do_del, 0, 8)
+        del_b.pack(side="left", fill="x", expand=True, padx=(4, 0))
+        hover_bind(del_b, "#FFD0D0", "#FFEEEE")
+        pop.bind("<Escape>", lambda e: pop.destroy())
+
+    # ──────────────────────────────────────────────────────────────
+    # FINANCE EXPORT
+    # ──────────────────────────────────────────────────────────────
+    def _open_finance_export(self, parent):
+        win = tk.Toplevel(parent)
+        win.title("导出记账记录"); win.configure(bg=CARD)
+        win.resizable(False, False); win.grab_set()
+        self._center(win, 300, 340)
+
+        tk.Label(win, text="📤 导出记账记录", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 15, "bold")).pack(pady=(18, 12))
+        frm = tk.Frame(win, bg=CARD); frm.pack(fill="x", padx=20)
+
+        def make_btn(label, cmd):
+            b = tk.Button(frm, text=label, command=cmd,
+                          bg=TOOLBAR, fg=TEXT, font=(self.FONT, 12),
+                          relief="flat", cursor="hand2", pady=8, anchor="w", padx=14)
+            b.pack(fill="x", pady=3)
+            b.bind("<Enter>", lambda e: b.configure(bg=ACCENT))
+            b.bind("<Leave>", lambda e: b.configure(bg=TOOLBAR))
+
+        def do_all():
+            if messagebox.askyesno("确认", "是否导出全部记账记录？", parent=win):
+                win.destroy(); self._export_finance_pdf()
+
+        make_btn("📋 全部导出", do_all)
+        make_btn("📅 年导出", lambda: self._finance_export_year(win))
+        make_btn("🗓 月导出", lambda: self._finance_export_month(win))
+        make_btn("📆 随机日期导出", lambda: self._finance_export_custom(win))
+
+        tk.Button(win, text="取消", command=win.destroy,
+                  bg=CARD, fg=TEXTG, font=(self.FONT, 10),
+                  relief="flat", cursor="hand2").pack(pady=(8, 14))
+        win.bind("<Escape>", lambda e: win.destroy())
+
+    def _finance_export_year(self, export_win):
+        records = finance_all()
+        years = sorted(set(int(r["date"][:4]) for r in records if len(r["date"]) >= 4))
+        if not years:
+            messagebox.showinfo("提示", "暂无记账记录！", parent=export_win); return
+        win = tk.Toplevel(export_win)
+        win.title("年导出"); win.configure(bg=CARD)
+        win.resizable(False, False); win.grab_set()
+        self._center(win, 280, 200)
+        tk.Label(win, text="选择年份", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 14, "bold")).pack(pady=(18, 8))
+        var = tk.StringVar(value=str(years[-1]))
+        ttk.Combobox(win, textvariable=var, values=[str(y) for y in reversed(years)],
+                     state="readonly", width=10, font=(self.FONT, 12)).pack(pady=4)
+        def do_export():
+            y = int(var.get())
+            if messagebox.askyesno("确认", f"是否导出 {y} 年的记账记录？", parent=win):
+                win.destroy(); export_win.destroy()
+                self._export_finance_pdf(start_dt=date(y, 1, 1), end_dt=date(y, 12, 31))
+        tk.Button(win, text="导出", command=do_export, bg=GREEN, fg=TEXT,
+                  font=(self.FONT, 12, "bold"), relief="flat", cursor="hand2",
+                  pady=6, padx=20).pack(pady=(10, 4))
+        tk.Button(win, text="返回", command=win.destroy, bg=CARD, fg=TEXTG,
+                  font=(self.FONT, 10), relief="flat", cursor="hand2").pack(pady=(0, 12))
+        win.bind("<Escape>", lambda e: win.destroy())
+
+    def _finance_export_month(self, export_win):
+        records = finance_all()
+        years = sorted(set(int(r["date"][:4]) for r in records if len(r["date"]) >= 4))
+        if not years:
+            messagebox.showinfo("提示", "暂无记账记录！", parent=export_win); return
+        win = tk.Toplevel(export_win)
+        win.title("月导出"); win.configure(bg=CARD)
+        win.resizable(False, False); win.grab_set()
+        self._center(win, 300, 220)
+        tk.Label(win, text="选择月份", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 14, "bold")).pack(pady=(18, 8))
+        row = tk.Frame(win, bg=CARD); row.pack()
+        yr_v = tk.StringVar(value=str(years[-1]))
+        mo_v = tk.StringVar(value="1")
+        ttk.Combobox(row, textvariable=yr_v, values=[str(y) for y in reversed(years)],
+                     state="readonly", width=7, font=(self.FONT, 12)).pack(side="left", padx=3)
+        tk.Label(row, text="年", bg=CARD, fg=TEXT, font=(self.FONT, 12)).pack(side="left")
+        ttk.Combobox(row, textvariable=mo_v, values=[str(m) for m in range(1, 13)],
+                     state="readonly", width=4, font=(self.FONT, 12)).pack(side="left", padx=3)
+        tk.Label(row, text="月", bg=CARD, fg=TEXT, font=(self.FONT, 12)).pack(side="left")
+        def do_export():
+            y = int(yr_v.get()); m = int(mo_v.get())
+            last = cal_mod.monthrange(y, m)[1]
+            if messagebox.askyesno("确认", f"是否导出 {y}年{m}月 的记账记录？", parent=win):
+                win.destroy(); export_win.destroy()
+                self._export_finance_pdf(start_dt=date(y, m, 1), end_dt=date(y, m, last))
+        tk.Button(win, text="导出", command=do_export, bg=GREEN, fg=TEXT,
+                  font=(self.FONT, 12, "bold"), relief="flat", cursor="hand2",
+                  pady=6, padx=20).pack(pady=(10, 4))
+        tk.Button(win, text="返回", command=win.destroy, bg=CARD, fg=TEXTG,
+                  font=(self.FONT, 10), relief="flat", cursor="hand2").pack(pady=(0, 12))
+        win.bind("<Escape>", lambda e: win.destroy())
+
+    def _finance_export_custom(self, export_win):
+        win = tk.Toplevel(export_win)
+        win.title("随机日期导出"); win.configure(bg=CARD)
+        win.resizable(False, False); win.grab_set()
+        self._center(win, 340, 260)
+        tk.Label(win, text="选择日期范围", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 14, "bold")).pack(pady=(18, 8))
+        f = tk.Frame(win, bg=CARD, padx=20); f.pack(fill="x")
+        today = date.today()
+        tk.Label(f, text="开始日期 (YYYY-MM-DD)", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11)).pack(anchor="w")
+        se = tk.Entry(f, font=(self.FONT, 12), relief="flat", bg="#FFF8EE", fg=TEXT,
+                      bd=1, highlightthickness=1, highlightbackground=BORDER)
+        se.pack(fill="x", pady=(2, 6), ipady=3)
+        se.insert(0, f"{today.year}-01-01")
+        tk.Label(f, text="结束日期 (YYYY-MM-DD)", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11)).pack(anchor="w")
+        ee = tk.Entry(f, font=(self.FONT, 12), relief="flat", bg="#FFF8EE", fg=TEXT,
+                      bd=1, highlightthickness=1, highlightbackground=BORDER)
+        ee.pack(fill="x", pady=(2, 8), ipady=3)
+        ee.insert(0, dk(today))
+        def do_export():
+            try:
+                sd = date.fromisoformat(se.get().strip())
+                ed = date.fromisoformat(ee.get().strip())
+            except ValueError:
+                messagebox.showwarning("提示", "日期格式错误！", parent=win); return
+            if sd > ed:
+                messagebox.showwarning("提示", "开始日期不能大于结束日期！", parent=win); return
+            if messagebox.askyesno("确认",
+                    f"是否导出 {sd.year}年{sd.month}月{sd.day}日 至 "
+                    f"{ed.year}年{ed.month}月{ed.day}日 的记账记录？", parent=win):
+                win.destroy(); export_win.destroy()
+                self._export_finance_pdf(start_dt=sd, end_dt=ed)
+        tk.Button(win, text="导出", command=do_export, bg=GREEN, fg=TEXT,
+                  font=(self.FONT, 12, "bold"), relief="flat", cursor="hand2",
+                  pady=6, padx=20).pack(pady=(4, 4))
+        tk.Button(win, text="返回", command=win.destroy, bg=CARD, fg=TEXTG,
+                  font=(self.FONT, 10), relief="flat", cursor="hand2").pack(pady=(0, 12))
+        win.bind("<Escape>", lambda e: win.destroy())
+
+    # ──────────────────────────────────────────────────────────────
+    # FINANCE PDF EXPORT
+    # ──────────────────────────────────────────────────────────────
+    def _export_finance_pdf(self, start_dt=None, end_dt=None):
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib import colors as rc
+            from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer,
+                                             PageBreak, Table, TableStyle)
+            from reportlab.lib.styles import ParagraphStyle
+            from reportlab.lib.units import cm
+            from reportlab.pdfbase import pdfmetrics
+            from reportlab.pdfbase.ttfonts import TTFont
+        except ImportError:
+            messagebox.showwarning("提示",
+                "请先安装 reportlab：\npip install reportlab\n然后重新运行程序。")
+            return
+
+        font_candidates = [
+            ("C:/Windows/Fonts/msyh.ttc", True),
+            ("C:/Windows/Fonts/simsun.ttc", True),
+            ("C:/Windows/Fonts/simhei.ttf", False),
+        ]
+        registered = False
+        reg_fp = None; reg_ttc = False
+        for fp, is_ttc in font_candidates:
+            if not os.path.exists(fp): continue
+            try:
+                if is_ttc:
+                    pdfmetrics.registerFont(TTFont("CNFont", fp, subfontIndex=0))
+                else:
+                    pdfmetrics.registerFont(TTFont("CNFont", fp))
+                registered = True; reg_fp = fp; reg_ttc = is_ttc; break
+            except: continue
+        if not registered:
+            messagebox.showwarning("提示", "找不到合适的中文字体，无法生成PDF。"); return
+
+        bold_candidates = [
+            ("C:/Windows/Fonts/msyhbd.ttc", True),
+            ("C:/Windows/Fonts/simhei.ttf", False),
+            (reg_fp, reg_ttc),
+        ]
+        for fp_b, is_ttc_b in bold_candidates:
+            if not fp_b or not os.path.exists(fp_b): continue
+            try:
+                if is_ttc_b:
+                    pdfmetrics.registerFont(TTFont("CNFontBold", fp_b, subfontIndex=0))
+                else:
+                    pdfmetrics.registerFont(TTFont("CNFontBold", fp_b))
+                break
+            except: continue
+
+        out_dir = r"D:\lifeplanner\recording"
+        os.makedirs(out_dir, exist_ok=True)
+        fname = f"记账本_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        fpath = os.path.join(out_dir, fname)
+
+        PW, PH = A4
+        doc = SimpleDocTemplate(fpath, pagesize=A4,
+                                leftMargin=2.5*cm, rightMargin=2.5*cm,
+                                topMargin=2.2*cm, bottomMargin=2.2*cm)
+        body_w = PW - 5*cm
+
+        c_text   = rc.HexColor("#5A4040")
+        c_textg  = rc.HexColor("#9A8878")
+        c_border = rc.HexColor("#F0E0D0")
+        c_inc    = rc.HexColor("#2E7D32")
+        c_exp    = rc.HexColor("#D32F2F")
+
+        def S(nm, sz, align=0, color=None, before=0, after=5, font="CNFont"):
+            return ParagraphStyle(nm, fontName=font, fontSize=sz,
+                                  textColor=color or c_text, alignment=align,
+                                  spaceBefore=before, spaceAfter=after,
+                                  leading=sz * 1.65)
+
+        s_title   = S("FT",  28, align=1, before=50, after=10, font="CNFontBold")
+        s_sub     = S("FSub",13, align=1, after=6, color=c_textg)
+        s_year    = S("FYr", 20, before=12, after=6, font="CNFontBold")
+        s_month   = S("FMo", 16, before=8,  after=4, font="CNFontBold")
+        s_summary = S("FSum",13, before=4,  after=3, font="CNFontBold")
+        s_cattot  = S("FCt", 11, before=2,  after=2)
+        s_ai      = S("FAI", 10, color=c_inc)
+        s_ae      = S("FAE", 10, color=c_exp)
+        s_item    = S("FIt", 10, after=2)
+        s_note    = S("FNo",  9, after=3, color=c_textg)
+        s_dcol    = S("FDc", 10, color=c_textg)
+
+        records = finance_all()
+        if start_dt:
+            records = [r for r in records if r["date"] >= dk(start_dt)]
+        if end_dt:
+            records = [r for r in records if r["date"] <= dk(end_dt)]
+        if not records:
+            messagebox.showinfo("提示", "所选范围内暂无记账记录！"); return
+        records.sort(key=lambda r: r["date"])
+
+        from collections import defaultdict
+        by_ym = defaultdict(list)
+        for r in records:
+            by_ym[(int(r["date"][:4]), int(r["date"][5:7]))].append(r)
+
+        story = []
+        story.append(Spacer(1, 3*cm))
+        story.append(Paragraph("记账本", s_title))
+        story.append(Paragraph("Finance Record", s_sub))
+        story.append(Spacer(1, 0.5*cm))
+        story.append(Paragraph(
+            f"生成时间：{datetime.now().strftime('%Y年%m月%d日')}",
+            S("FDt", 11, align=1, color=c_textg)))
+        story.append(PageBreak())
+
+        years = sorted(set(k[0] for k in by_ym))
+        for year in years:
+            story.append(Paragraph(f"{year}年", s_year))
+            story.append(Spacer(1, 0.2*cm))
+            months = sorted(k[1] for k in by_ym if k[0] == year)
+            for month in months:
+                mr = by_ym[(year, month)]
+                story.append(Paragraph(f"{month}月", s_month))
+                inc = sum(r["amount"] for r in mr if r["ftype"] == "income")
+                exp = sum(r["amount"] for r in mr if r["ftype"] == "expense")
+                bal = inc - exp
+                sign = "+" if bal >= 0 else ""
+                story.append(Paragraph(
+                    f"收入: ¥{inc:.2f}    支出: ¥{exp:.2f}    结余: {sign}¥{bal:.2f}",
+                    s_summary))
+                cat_totals = defaultdict(float)
+                for r in mr: cat_totals[r["category"]] += r["amount"]
+                parts = [f"{c}: ¥{v:.2f}" for c, v in cat_totals.items()]
+                if parts:
+                    story.append(Paragraph("    ".join(parts), s_cattot))
+                t = Table([[""]], colWidths=[body_w], rowHeights=[2])
+                t.setStyle(TableStyle([
+                    ("LINEBELOW", (0,0), (-1,0), 1.5, c_border),
+                    ("TOPPADDING", (0,0), (-1,-1), 0),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+                ]))
+                story.append(t)
+                story.append(Spacer(1, 0.1*cm))
+                for r in sorted(mr, key=lambda x: x["date"]):
+                    is_i = r["ftype"] == "income"
+                    sg = "+" if is_i else "-"
+                    row_data = [[
+                        Paragraph(f"{sg}¥{r['amount']:.2f}", s_ai if is_i else s_ae),
+                        Paragraph(r["category"], s_item),
+                        Paragraph(r["date"], s_dcol),
+                    ]]
+                    t2 = Table(row_data, colWidths=[body_w*0.3, body_w*0.35, body_w*0.35])
+                    t2.setStyle(TableStyle([
+                        ("TOPPADDING", (0,0), (-1,-1), 3),
+                        ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+                        ("LEFTPADDING", (0,0), (-1,-1), 4),
+                    ]))
+                    story.append(t2)
+                    if r.get("note"):
+                        story.append(Paragraph(f"备注: {r['note']}", s_note))
+                    div = Table([[""]], colWidths=[body_w], rowHeights=[1])
+                    div.setStyle(TableStyle([
+                        ("LINEBELOW", (0,0), (-1,0), 0.5, c_border),
+                        ("TOPPADDING", (0,0), (-1,-1), 0),
+                        ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+                    ]))
+                    story.append(div)
+                story.append(Spacer(1, 0.3*cm))
+
+        while story and isinstance(story[-1], (PageBreak, Spacer)):
+            story.pop()
+
+        def footer(canvas, _doc):
+            canvas.saveState()
+            canvas.setFont("CNFont", 9)
+            canvas.setFillColor(c_textg)
+            canvas.drawRightString(PW - 2.5*cm, 1.3*cm,
+                                   f"第 {canvas.getPageNumber()} 页")
+            canvas.setStrokeColor(c_border)
+            canvas.line(2.5*cm, 1.6*cm, PW - 2.5*cm, 1.6*cm)
+            canvas.restoreState()
+
+        try:
+            doc.build(story, onFirstPage=footer, onLaterPages=footer)
+            messagebox.showinfo("导出成功", f"记账本 PDF 已保存至：\n{fpath}")
+        except Exception as e:
+            messagebox.showerror("导出失败", f"生成 PDF 时出错：\n{e}")
 
     # ──────────────────────────────────────────────────────────────
     # EXPORT DIALOG
