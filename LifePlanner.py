@@ -8,6 +8,7 @@ import tkinter.font as tkfont
 import json, os, math, uuid
 from datetime import datetime, date, timedelta
 import calendar as cal_mod
+import time as time_mod
 
 # ================================================================
 # DATA FILE
@@ -53,17 +54,17 @@ WEEKDAY_CN = ["星期一", "星期二", "星期三", "星期四", "星期五", "
 # ================================================================
 def _load():
     if not os.path.exists(DATA_FILE):
-        return {"tasks": {}, "countdowns": [], "weight": [], "summaries": {}, "thoughts": [], "finance": []}
+        return {"tasks": {}, "countdowns": [], "weight": [], "summaries": {}, "thoughts": [], "finance": [], "focus": []}
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             d = json.load(f)
             for k in ("tasks", "summaries"):
                 if k not in d: d[k] = {}
-            for k in ("countdowns", "weight", "thoughts", "finance"):
+            for k in ("countdowns", "weight", "thoughts", "finance", "focus"):
                 if k not in d: d[k] = []
             return d
     except:
-        return {"tasks": {}, "countdowns": [], "weight": [], "summaries": {}, "thoughts": [], "finance": []}
+        return {"tasks": {}, "countdowns": [], "weight": [], "summaries": {}, "thoughts": [], "finance": [], "focus": []}
 
 def _save(d):
     os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
@@ -298,6 +299,53 @@ def weight_for_year(year):
                     "ws": sum(wss)/len(wss) if wss else None})
     return res
 
+# ─── FOCUS SESSIONS (专注计时) ────────────────────────────────────
+def _ensure_focus(d):
+    if "focus" not in d: d["focus"] = []
+
+def focus_add(name, duration, date_str, note=""):
+    d = _load(); _ensure_focus(d)
+    d["focus"].append({"id": uuid.uuid4().hex[:8], "name": name,
+                       "duration": duration, "date": date_str, "note": note})
+    _save(d)
+
+def focus_edit(fid, name, duration, note):
+    d = _load(); _ensure_focus(d)
+    for f in d["focus"]:
+        if f["id"] == fid:
+            f["name"] = name; f["duration"] = duration; f["note"] = note
+    _save(d)
+
+def focus_del(fid):
+    d = _load(); _ensure_focus(d)
+    d["focus"] = [f for f in d["focus"] if f["id"] != fid]
+    _save(d)
+
+def focus_all():
+    d = _load(); _ensure_focus(d)
+    return list(d["focus"])
+
+def focus_names():
+    d = _load(); _ensure_focus(d)
+    return list(set(f["name"] for f in d["focus"] if f.get("name")))
+
+def focus_in_range(start_key, end_key):
+    d = _load(); _ensure_focus(d)
+    return [f for f in d["focus"] if start_key <= f["date"] <= end_key]
+
+def focus_for_today():
+    return focus_in_range(today_key(), today_key())
+
+def focus_for_week(monday):
+    return focus_in_range(dk(monday), dk(monday + timedelta(6)))
+
+def focus_aggregated(sessions):
+    agg = {}
+    for s in sessions:
+        name = s["name"]
+        agg[name] = agg.get(name, 0) + s["duration"]
+    return agg
+
 # ─── SUMMARIES ───────────────────────────────────────────────────
 def reflection_save(key, text):
     d = _load()
@@ -505,6 +553,11 @@ class App:
             lbl = clickable_label(tb, txt, bg, TEXT, (self.FONT, 12, "bold"), cmd, 13, 8)
             lbl.pack(side="left", padx=4)
             hover_bind(lbl, bgh, bg)
+        # Focus timer button (top-right)
+        focus_btn = clickable_label(tb, "🎯 专注计时", "#E8F4FD", TEXT,
+                                    (self.FONT, 12, "bold"), self._open_focus_timer, 13, 8)
+        focus_btn.pack(side="right", padx=(4, 14))
+        hover_bind(focus_btn, "#C8E6F5", "#E8F4FD")
 
     def _build_left(self):
         # ── Calendar RCard ──────────────────────────────────────
@@ -903,13 +956,15 @@ class App:
                              fg=TEXTG if task.get("done") else TEXT,
                              font=name_font, anchor="w")
         name_lbl.pack(anchor="w")
-        if task.get("desc"):
-            tk.Label(cont, text=task["desc"], bg=ibg, fg=TEXTG,
-                     font=(self.FONT, 11), anchor="w", wraplength=380).pack(anchor="w")
         # badge
         badge_bg = PRIO_BADGE[pri]
         tk.Label(inner, text=PRIO_LABEL[pri], bg=badge_bg, fg=bc,
                  font=(self.FONT, 10, "bold"), padx=5, pady=1).pack(side="left", padx=4)
+        if task.get("desc"):
+            desc_lbl = tk.Label(cont, text=task["desc"], bg=ibg, fg=TEXTG,
+                     font=(self.FONT, 11), anchor="w", justify="left")
+            desc_lbl.pack(fill="x", anchor="w")
+            desc_lbl.bind("<Configure>", lambda e, l=desc_lbl: l.config(wraplength=max(1, e.width - 4)))
         # double-click on row/content → edit popup
         def on_dbl(e, k=date_key, t=task):
             self._open_task_edit(k, t)
@@ -1426,14 +1481,14 @@ class App:
     def _open_summary(self, init_type):
         win = tk.Toplevel(self.root); win.title("总结")
         win.configure(bg=CARD); win.resizable(True, True); win.grab_set()
-        self._center(win, 660, 660)
+        self._center(win, 700, 860)
         tk.Label(win, text="✨ 总 结", bg=CARD, fg=TEXT,
-                 font=(self.FONT, 20, "bold")).pack(pady=(18, 10))
+                 font=(self.FONT, 20, "bold")).pack(pady=(22, 14))
 
         state = {"t": init_type, "off": 0}
 
         # Tabs
-        tf = tk.Frame(win, bg=CARD); tf.pack(pady=(0, 8)); tabs = {}
+        tf = tk.Frame(win, bg=CARD); tf.pack(pady=(0, 12)); tabs = {}
 
         def sw(t): state["t"] = t; state["off"] = 0; upd_tabs(); refresh()
         for tid, tlbl in [("week", "📅周总结"), ("month", "📊月总结"), ("year", "🗓️年总结")]:
@@ -1449,7 +1504,7 @@ class App:
                 b.configure(bg=ACCENT if state["t"] == tid else "#FFF8EE")
 
         # Nav
-        nf = tk.Frame(win, bg=CARD); nf.pack(pady=(0, 8))
+        nf = tk.Frame(win, bg=CARD); nf.pack(pady=(0, 12))
         period_v = tk.StringVar()
         pb = self._circle_btn(nf, "‹", BORDER, "#E0D0C0",
                               lambda: (state.__setitem__("off", state["off"] - 1), refresh()))
@@ -1461,7 +1516,7 @@ class App:
         nb.pack(side="left")
 
         # Charts
-        chf = tk.Frame(win, bg=CARD); chf.pack(fill="x", padx=20, pady=(0, 8))
+        chf = tk.Frame(win, bg=CARD); chf.pack(fill="x", padx=20, pady=(0, 12))
         wt_cf = tk.Frame(chf, bg="#FFF8EE"); wt_cf.pack(side="left", fill="both", expand=True, padx=(0, 4))
         tk.Label(wt_cf, text="体重趋势 (kg)", bg="#FFF8EE", fg=TEXTG,
                  font=(self.FONT, 11)).pack(anchor="w", padx=6, pady=3)
@@ -1474,7 +1529,7 @@ class App:
         s_ws.pack(fill="x", padx=4)
 
         # Stats
-        sf2 = tk.Frame(win, bg=CARD); sf2.pack(fill="x", padx=20, pady=(0, 10))
+        sf2 = tk.Frame(win, bg=CARD); sf2.pack(fill="x", padx=20, pady=(0, 14))
         sv_u = tk.StringVar(value="0")
         sv_i = tk.StringVar(value="0")
         sv_n = tk.StringVar(value="0")
@@ -1483,22 +1538,33 @@ class App:
             (sv_i, "🟠 完成重要",   "#FFF5EE", IMPRT),
             (sv_n, "🔵 完成不重要", "#F0F5FF", NORMAL),
         ]:
-            sf3 = tk.Frame(sf2, bg=sbg, padx=10, pady=8)
+            sf3 = tk.Frame(sf2, bg=sbg, padx=10, pady=10)
             sf3.pack(side="left", fill="both", expand=True, padx=3)
             tk.Label(sf3, textvariable=sv, bg=sbg, fg=sc,
                      font=(self.FONT, 24, "bold")).pack()
             tk.Label(sf3, text=slbl, bg=sbg, fg=TEXTG, font=(self.FONT, 11)).pack()
 
+        # Focus pie chart
+        focus_chf = tk.Frame(win, bg=CARD)
+        focus_chf.pack(fill="x", padx=20, pady=(0, 12))
+        tk.Label(focus_chf, text="🎯 专注时间分布", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 12, "bold")).pack(anchor="w", pady=(0, 4))
+        s_focus_pie = tk.Canvas(focus_chf, bg=CARD, highlightthickness=0, height=140)
+        s_focus_pie.pack(fill="x")
+        s_focus_top3 = tk.Label(focus_chf, text="", bg=CARD, fg=TEXT,
+                                 font=(self.FONT, 10), anchor="w")
+        s_focus_top3.pack(fill="x", pady=(4, 0))
+
         # Reflection
         tk.Label(win, text="💭 反思与展望", bg=CARD, fg=TEXTG,
-                 font=(self.FONT, 13, "bold")).pack(anchor="w", padx=20)
+                 font=(self.FONT, 13, "bold")).pack(anchor="w", padx=20, pady=(4, 0))
         ref_t = tk.Text(win, height=5, font=(self.FONT, 13), relief="flat",
                         bg="white", fg=TEXT, bd=1, padx=10, pady=8, wrap="word",
                         highlightthickness=1, highlightbackground=BORDER)
-        ref_t.pack(fill="x", padx=20, pady=(4, 6))
+        ref_t.pack(fill="x", padx=20, pady=(6, 8))
         sav = clickable_label(win, "保存反思  💾", GREEN, TEXT,
                               (self.FONT, 13, "bold"), lambda: None, 0, 9)
-        sav.pack(fill="x", padx=20, pady=(0, 16))
+        sav.pack(fill="x", padx=20, pady=(0, 18))
         hover_bind(sav, GREEN2, GREEN)
 
         def get_key():
@@ -1551,6 +1617,24 @@ class App:
             sv_u.set(str(sum(1 for t2 in done if t2["pri"] == "u")))
             sv_i.set(str(sum(1 for t2 in done if t2["pri"] == "i")))
             sv_n.set(str(sum(1 for t2 in done if t2["pri"] == "n")))
+            # Focus pie chart
+            f_sessions = focus_in_range(sk, ek)
+            f_agg = focus_aggregated(f_sessions)
+            def _draw_focus():
+                pw = s_focus_pie.winfo_width()
+                if pw < 10: pw = 400
+                self._draw_pie_chart(s_focus_pie, f_agg, pw, 130)
+                if f_agg:
+                    top3 = sorted(f_agg.items(), key=lambda x: -x[1])[:3]
+                    parts = []
+                    for nm, dur in top3:
+                        hrs = int(dur // 3600); mins = int((dur % 3600) // 60)
+                        ts = f"{hrs}h{mins:02d}m" if hrs else f"{mins}m"
+                        parts.append(f"{nm}(共{ts})")
+                    s_focus_top3.configure(text="耗时最长: " + "  ".join(parts))
+                else:
+                    s_focus_top3.configure(text="")
+            win.after(100, _draw_focus)
             ref_t.delete("1.0", "end"); ref_t.insert("1.0", reflection_get(get_key()))
             upd_tabs()
 
@@ -1564,7 +1648,7 @@ class App:
     def _open_thoughts(self):
         win = tk.Toplevel(self.root); win.title("💭 胡思乱想")
         win.configure(bg=BG); win.resizable(True, True); win.grab_set()
-        self._center(win, 920, 640)
+        self._center(win, 920, 720)
 
         main = tk.Frame(win, bg=BG)
         main.pack(fill="both", expand=True, padx=10, pady=10)
@@ -2794,6 +2878,8 @@ class App:
             from reportlab.lib.units import cm
             from reportlab.pdfbase import pdfmetrics
             from reportlab.pdfbase.ttfonts import TTFont
+            from reportlab.graphics.shapes import Drawing, String
+            from reportlab.graphics.charts.piecharts import Pie
         except ImportError:
             messagebox.showwarning("提示",
                 "请先安装 reportlab：\npip install reportlab\n然后重新运行程序。")
@@ -2889,6 +2975,68 @@ class App:
         summaries = d.get("summaries", {})
         tasks_data = d.get("tasks", {})
         weight_data = d.get("weight", [])
+        focus_data = d.get("focus", [])
+
+        def focus_in(sk, ek):
+            return [f for f in focus_data if sk <= f["date"] <= ek]
+
+        def focus_agg(sessions):
+            agg = {}
+            for s in sessions:
+                agg[s["name"]] = agg.get(s["name"], 0) + s["duration"]
+            return agg
+
+        def focus_top3_text(agg):
+            if not agg: return ""
+            top3 = sorted(agg.items(), key=lambda x: -x[1])[:3]
+            parts = []
+            for nm, dur in top3:
+                hrs = int(dur // 3600); mins = int((dur % 3600) // 60)
+                ts = f"{hrs}小时{mins}分钟" if hrs else f"{mins}分钟"
+                parts.append(f"{nm} (共{ts})")
+            return "耗时最长: " + "、".join(parts)
+
+        _mac_rc = [rc.HexColor(c) for c in self._MACARON]
+
+        def make_focus_pie(agg, draw_w=380, draw_h=160):
+            items = sorted(agg.items(), key=lambda x: -x[1])
+            total = sum(v for _, v in items)
+            if total == 0:
+                return None
+            d = Drawing(draw_w, draw_h)
+            pie = Pie()
+            pie.x = draw_w // 2 - 70
+            pie.y = 15
+            pie.width = 120
+            pie.height = 120
+            pie.data = [v for _, v in items]
+            pie.labels = None
+            pie.slices.strokeWidth = 0.5
+            pie.slices.strokeColor = rc.white
+            for idx in range(len(items)):
+                pie.slices[idx].fillColor = _mac_rc[idx % len(_mac_rc)]
+            d.add(pie)
+            lx = pie.x + pie.width + 18
+            ly = draw_h - 18
+            for idx, (nm, dur) in enumerate(items):
+                hrs = int(dur // 3600); mins = int((dur % 3600) // 60)
+                ts = f"{hrs}h{mins:02d}m" if hrs else f"{mins}m"
+                pct = f"{dur/total*100:.0f}%"
+                color = _mac_rc[idx % len(_mac_rc)]
+                d.add(String(lx, ly, "■", fontSize=10, fillColor=color))
+                d.add(String(lx + 12, ly, f"{nm} ({ts}, {pct})",
+                             fontSize=8, fillColor=rc.HexColor("#5A4040"),
+                             fontName="CNFont"))
+                ly -= 15
+            return d
+
+        def focus_section(story_list, agg):
+            story_list.append(Paragraph("专注时间分布：", s_h3))
+            chart = make_focus_pie(agg)
+            if chart:
+                story_list.append(chart)
+            story_list.append(Paragraph(focus_top3_text(agg), s_body))
+            story_list.append(Spacer(1, 0.1*cm))
 
         def get_ref(key):
             v = summaries.get(key, {})
@@ -2959,6 +3107,13 @@ class App:
             # Year header
             yr_story.append(hdr(f"{year} 年", c_accent, s_h1, body_w))
             yr_story.append(Spacer(1, 0.25*cm))
+
+            # 年专注时间
+            yr_focus = focus_in(f"{year}-01-01", f"{year}-12-31")
+            yr_focus_agg = focus_agg(yr_focus)
+            if show_yr_level and yr_focus_agg:
+                has = True
+                focus_section(yr_story, yr_focus_agg)
 
             # 年计划
             yr_th = sorted([t for t in thoughts
@@ -3086,14 +3241,19 @@ class App:
                 msk = f"{year}-{month:02d}-01"
                 mek = f"{year}-{month:02d}-{cal_mod.monthrange(year, month)[1]:02d}"
                 m_done = [t for t in tasks_in(msk, mek) if t.get("done")]
+                m_focus = focus_in(msk, mek)
+                m_focus_agg = focus_agg(m_focus)
 
                 if not in_range(date(year, month, 1),
                                 date(year, month, cal_mod.monthrange(year, month)[1])):
                     continue
-                if not mth and not mref and not m_done: continue
+                if not mth and not mref and not m_done and not m_focus_agg: continue
                 has = True
                 yr_story.append(hdr(f"{month} 月", c_toolbar, s_h2, body_w))
                 yr_story.append(Spacer(1, 0.1*cm))
+
+                if m_focus_agg:
+                    focus_section(yr_story, m_focus_agg)
 
                 if mth:
                     yr_story.append(Paragraph("月计划", s_h3))
@@ -3133,14 +3293,19 @@ class App:
                                  key=lambda x: x["created"])
                 wsk = dk(d_); wek = dk(wend)
                 w_done = [t for t in tasks_in(wsk, wek) if t.get("done")]
+                w_focus = focus_in(wsk, wek)
+                w_focus_agg = focus_agg(w_focus)
 
-                if wth or wref or w_done:
+                if wth or wref or w_done or w_focus_agg:
                     has = True
                     wnum  = d_.isocalendar()[1]
                     wlbl  = (f"第 {wnum} 周  "
                              f"({d_.month}月{d_.day}日 — {wend.month}月{wend.day}日)")
                     yr_story.append(hdr(wlbl, c_blue, s_h2, body_w))
                     yr_story.append(Spacer(1, 0.1*cm))
+
+                    if w_focus_agg:
+                        focus_section(yr_story, w_focus_agg)
 
                     if wth:
                         yr_story.append(Paragraph("周计划", s_h3))
@@ -3188,6 +3353,539 @@ class App:
             messagebox.showinfo("导出成功", f"PDF 已保存至：\n{fpath}")
         except Exception as e:
             messagebox.showerror("导出失败", f"生成 PDF 时出错：\n{e}")
+
+
+    # ──────────────────────────────────────────────────────────────
+    # FOCUS TIMER (专注计时)
+    # ──────────────────────────────────────────────────────────────
+    _MACARON = ["#FFB5B5", "#FFDAA5", "#FFFAB5", "#B5EAAA", "#B5E8E3",
+                "#B5D4F7", "#C9B5F7", "#F7B5E0", "#F7C5B5", "#A5E0D6",
+                "#E8C5F0", "#F0D5A8", "#A8D8EA", "#F5B7B1", "#D5F5E3"]
+
+    def _draw_pie_chart(self, canvas, agg_data, w, h):
+        canvas.delete("all")
+        if not agg_data:
+            canvas.create_text(w // 2, h // 2, text="暂无数据", fill=TEXTG,
+                               font=(self.FONT, 11))
+            return
+        total = sum(agg_data.values())
+        if total == 0:
+            canvas.create_text(w // 2, h // 2, text="暂无数据", fill=TEXTG,
+                               font=(self.FONT, 11))
+            return
+        r = min(w // 4, h // 2 - 8, 75)
+        cy = h // 2
+        items = sorted(agg_data.items(), key=lambda x: -x[1])
+        legend_w_est = 160
+        total_w = 2 * r + 18 + legend_w_est
+        cx = max(r + 6, (w - total_w) // 2 + r)
+        start = 0
+        legend_x = cx + r + 18
+        legend_y = max(6, cy - len(items) * 9)
+        for idx, (name, dur) in enumerate(items):
+            color = self._MACARON[idx % len(self._MACARON)]
+            if len(items) == 1:
+                canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
+                                   fill=color, outline="white", width=2)
+            else:
+                extent = (dur / total) * 360
+                canvas.create_arc(cx - r, cy - r, cx + r, cy + r,
+                                  start=start, extent=extent,
+                                  fill=color, outline="white", width=2)
+                start += extent
+            hrs = int(dur // 3600)
+            mins = int((dur % 3600) // 60)
+            time_str = f"{hrs}h{mins:02d}m" if hrs else f"{mins}m"
+            pct = f"{dur/total*100:.0f}%"
+            canvas.create_rectangle(legend_x, legend_y, legend_x + 10, legend_y + 10,
+                                     fill=color, outline="")
+            canvas.create_text(legend_x + 14, legend_y + 5, anchor="w",
+                               text=f"{name} ({time_str}, {pct})",
+                               fill=TEXT, font=(self.FONT, 9))
+            legend_y += 17
+
+    def _open_focus_timer(self):
+        win = tk.Toplevel(self.root)
+        win.title("🎯 专注计时")
+        win.configure(bg=BG)
+        win.resizable(True, True)
+        win.grab_set()
+        self._center(win, 1000, 700)
+
+        tk.Label(win, text="🎯 专注计时", bg=BG, fg=TEXT,
+                 font=(self.FONT, 18, "bold")).pack(pady=(12, 8))
+
+        main = tk.Frame(win, bg=BG)
+        main.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        main.columnconfigure(0, weight=1)
+        main.columnconfigure(1, weight=1)
+        main.rowconfigure(0, weight=1)
+
+        # ── Left Panel (History) ──
+        left_card = RCard(main, r=16, bg=CARD)
+        left_card.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
+        left_card.inner.columnconfigure(0, weight=1)
+        left_card.inner.rowconfigure(2, weight=1)
+
+        tk.Label(left_card.inner, text="📋 历史记录", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 14, "bold")).grid(row=0, column=0, sticky="w",
+                                                     padx=12, pady=(10, 2))
+
+        # Search + date filter (compact single row)
+        filter_f = tk.Frame(left_card.inner, bg=CARD)
+        filter_f.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 4))
+        search_var = tk.StringVar()
+        tk.Label(filter_f, text="🔍", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 10)).pack(side="left")
+        search_e = tk.Entry(filter_f, textvariable=search_var, font=(self.FONT, 10),
+                            relief="flat", bg="#FFF8EE", fg=TEXT, bd=1, width=12,
+                            highlightthickness=1, highlightbackground=BORDER)
+        search_e.pack(side="left", fill="x", expand=True, ipady=2, padx=(2, 6))
+        date_var = tk.StringVar()
+        tk.Label(filter_f, text="📅", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 10)).pack(side="left")
+        date_e = tk.Entry(filter_f, textvariable=date_var, font=(self.FONT, 10),
+                          relief="flat", bg="#FFF8EE", fg=TEXT, bd=1, width=10,
+                          highlightthickness=1, highlightbackground=BORDER)
+        date_e.pack(side="left", ipady=2, padx=(2, 0))
+
+        left_card.inner.rowconfigure(2, weight=1)
+        list_scroll = ScrollFrame(left_card.inner, bg=CARD)
+        list_scroll.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 8))
+        list_frame = list_scroll.inner
+
+        def refresh_history():
+            for w in list_frame.winfo_children(): w.destroy()
+            query = search_var.get().strip()
+            dt_filter = date_var.get().strip()
+            all_sessions = focus_all()
+            has_filter = bool(query or dt_filter)
+            if has_filter:
+                filtered = all_sessions
+                if query:
+                    filtered = [s for s in filtered
+                                if query.lower() in s["name"].lower()]
+                if dt_filter:
+                    filtered = [s for s in filtered if s["date"] == dt_filter]
+            else:
+                filtered = all_sessions
+            filtered.sort(key=lambda x: x["date"], reverse=True)
+            if not filtered:
+                msg = "暂无专注记录~" if not has_filter else "未找到匹配记录"
+                tk.Label(list_frame, text=msg, bg=CARD, fg=TEXTL,
+                         font=(self.FONT, 12)).pack(pady=30)
+                return
+            for s in filtered:
+                row = tk.Frame(list_frame, bg="#F0F8FF", pady=6, padx=10)
+                row.pack(fill="x", pady=2, padx=4)
+                top = tk.Frame(row, bg="#F0F8FF")
+                top.pack(fill="x")
+                name_lbl = tk.Label(top, text=s["name"], bg="#F0F8FF", fg=TEXT,
+                                     font=(self.FONT, 12, "bold"))
+                name_lbl.pack(side="left")
+                tk.Label(top, text=s["date"], bg="#F0F8FF", fg=TEXTG,
+                         font=(self.FONT, 9)).pack(side="left", padx=(6, 0))
+                dur = s["duration"]
+                hrs = int(dur // 3600)
+                mins = int((dur % 3600) // 60)
+                time_str = f"{hrs}小时{mins:02d}分" if hrs else f"{mins}分钟"
+                tk.Label(top, text=time_str, bg="#F0F8FF", fg=BLUE2,
+                         font=(self.FONT, 12, "bold")).pack(side="right")
+                if s.get("note"):
+                    tk.Label(row, text=f"📝 {s['note']}", bg="#F0F8FF", fg=TEXTG,
+                             font=(self.FONT, 10), anchor="w", justify="left",
+                             wraplength=350).pack(fill="x", pady=(3, 0))
+                def on_dbl(e, item=s):
+                    self._open_focus_record_popup(item, refresh_history, refresh_pie)
+                for widget in (row, top, name_lbl):
+                    widget.bind("<Double-Button-1>", on_dbl)
+
+        search_var.trace("w", lambda *_: refresh_history())
+        date_var.trace("w", lambda *_: refresh_history())
+
+        # ── Right Panel (Timer Setup + Pie Chart) ──
+        right_card = RCard(main, r=16, bg=CARD)
+        right_card.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+        right_card.inner.columnconfigure(0, weight=1)
+        right_card.inner.rowconfigure(4, weight=1)
+
+        tk.Label(right_card.inner, text="⏱ 开始专注", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 14, "bold")).pack(pady=(12, 8), padx=20, anchor="w")
+
+        rf = tk.Frame(right_card.inner, bg=CARD, padx=20)
+        rf.pack(fill="x")
+
+        # Event name with autocomplete
+        tk.Label(rf, text="专注事件", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 12, "bold")).pack(anchor="w")
+        name_frame = tk.Frame(rf, bg=CARD)
+        name_frame.pack(fill="x", pady=(2, 8))
+        name_var = tk.StringVar()
+        name_e = tk.Entry(name_frame, textvariable=name_var, font=(self.FONT, 13),
+                          relief="flat", bg="#FFF8EE", fg=TEXT, bd=1,
+                          highlightthickness=1, highlightbackground=BORDER)
+        name_e.pack(fill="x", ipady=4)
+
+        # Autocomplete dropdown
+        suggest_lb = tk.Listbox(name_frame, font=(self.FONT, 11), bg="#FFF8EE",
+                                fg=TEXT, height=4, relief="flat", bd=1,
+                                highlightthickness=1, highlightbackground=BORDER)
+
+        def on_name_change(*_):
+            val = name_var.get().strip()
+            if not val:
+                suggest_lb.pack_forget()
+                return
+            names = focus_names()
+            matches = [n for n in names if val.lower() in n.lower()]
+            if matches and val not in matches:
+                suggest_lb.delete(0, "end")
+                for m in matches[:5]:
+                    suggest_lb.insert("end", m)
+                suggest_lb.pack(fill="x")
+            else:
+                suggest_lb.pack_forget()
+
+        def on_suggest_select(e):
+            sel = suggest_lb.curselection()
+            if sel:
+                name_var.set(suggest_lb.get(sel[0]))
+                suggest_lb.pack_forget()
+
+        name_var.trace("w", on_name_change)
+        suggest_lb.bind("<ButtonRelease-1>", on_suggest_select)
+
+        # Timer mode
+        tk.Label(rf, text="计时模式", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 12, "bold")).pack(anchor="w")
+        mode_f = tk.Frame(rf, bg=CARD)
+        mode_f.pack(fill="x", pady=(2, 8))
+        mode_var = tk.StringVar(value="countup")
+        mode_btns = {}
+
+        def upd_mode():
+            for mid, b in mode_btns.items():
+                sel = mode_var.get() == mid
+                b.configure(bg="#B8DFFB" if sel else "#FFF8EE",
+                            fg=TEXT if sel else TEXTG)
+
+        for mid, mlbl in [("countup", "正计时"), ("countdown", "倒计时")]:
+            b = tk.Label(mode_f, text=mlbl, bg="#FFF8EE", fg=TEXTG,
+                         font=(self.FONT, 12, "bold"), padx=14, pady=5, cursor="hand2")
+            b.pack(side="left", fill="x", expand=True, padx=2)
+            b.bind("<Button-1>", lambda e, m=mid: (mode_var.set(m), upd_mode()))
+            mode_btns[mid] = b
+        upd_mode()
+
+        # Duration input (for countdown)
+        tk.Label(rf, text="专注时间（倒计时用）", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 12, "bold")).pack(anchor="w")
+        dur_f = tk.Frame(rf, bg=CARD)
+        dur_f.pack(fill="x", pady=(2, 12))
+        hr_var = tk.StringVar(value="0")
+        min_var = tk.StringVar(value="25")
+        tk.Entry(dur_f, textvariable=hr_var, width=4, font=(self.FONT, 13),
+                 relief="flat", bg="#FFF8EE", bd=1,
+                 highlightthickness=1, highlightbackground=BORDER).pack(side="left", ipady=3)
+        tk.Label(dur_f, text="小时", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11)).pack(side="left", padx=(2, 8))
+        tk.Entry(dur_f, textvariable=min_var, width=4, font=(self.FONT, 13),
+                 relief="flat", bg="#FFF8EE", bd=1,
+                 highlightthickness=1, highlightbackground=BORDER).pack(side="left", ipady=3)
+        tk.Label(dur_f, text="分钟", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11)).pack(side="left", padx=(2, 0))
+
+        # Start button
+        def do_start():
+            name = name_var.get().strip()
+            if not name:
+                messagebox.showwarning("提示", "请输入专注事件名称！", parent=win)
+                return
+            mode = mode_var.get()
+            countdown_secs = 0
+            if mode == "countdown":
+                try:
+                    h = int(hr_var.get() or 0)
+                    m = int(min_var.get() or 0)
+                    countdown_secs = h * 3600 + m * 60
+                    if countdown_secs <= 0:
+                        messagebox.showwarning("提示", "请设置倒计时时间！", parent=win)
+                        return
+                except ValueError:
+                    messagebox.showwarning("提示", "请输入有效的时间！", parent=win)
+                    return
+            self._start_focus_session(win, name, mode, countdown_secs,
+                                      refresh_history, refresh_pie)
+
+        start_btn = clickable_label(rf, "▶ 开始专注", "#B8DFFB", TEXT,
+                                    (self.FONT, 14, "bold"), do_start, 0, 12)
+        start_btn.pack(fill="x")
+        hover_bind(start_btn, "#9AD0F5", "#B8DFFB")
+
+        # Today's pie chart
+        tk.Label(right_card.inner, text="📊 今日专注分布", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 13, "bold")).pack(pady=(12, 4), padx=20, anchor="w")
+        pie_cvs = tk.Canvas(right_card.inner, bg=CARD, highlightthickness=0, height=180)
+        pie_cvs.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+
+        def refresh_pie():
+            today_sessions = focus_for_today()
+            agg = focus_aggregated(today_sessions)
+            pie_cvs.update_idletasks()
+            pw = max(pie_cvs.winfo_width(), 300)
+            ph = max(pie_cvs.winfo_height(), 180)
+            self._draw_pie_chart(pie_cvs, agg, pw, ph)
+
+        pie_cvs.bind("<Configure>", lambda e: win.after(100, refresh_pie))
+        win.after(300, refresh_pie)
+        win.after(200, refresh_history)
+        win.bind("<Escape>", lambda e: win.destroy())
+
+    def _open_focus_record_popup(self, item, refresh_fn, refresh_pie_fn):
+        pop = tk.Toplevel(self.root)
+        pop.title("专注记录")
+        pop.configure(bg=CARD)
+        pop.resizable(False, False)
+        pop.grab_set()
+        self._center(pop, 400, 360)
+
+        tk.Label(pop, text="✏️ 编辑专注记录", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 16, "bold")).pack(pady=(16, 10))
+
+        f = tk.Frame(pop, bg=CARD, padx=24)
+        f.pack(fill="x")
+
+        tk.Label(f, text="事件名称", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11, "bold")).pack(anchor="w")
+        name_e = tk.Entry(f, font=(self.FONT, 12), relief="flat", bg="#FFF8EE", fg=TEXT,
+                          bd=1, highlightthickness=1, highlightbackground=BORDER)
+        name_e.pack(fill="x", pady=(2, 6), ipady=3)
+        name_e.insert(0, item["name"])
+
+        tk.Label(f, text="专注时间", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11, "bold")).pack(anchor="w")
+        dur_f = tk.Frame(f, bg=CARD)
+        dur_f.pack(fill="x", pady=(2, 6))
+        dur = item["duration"]
+        hr_var = tk.StringVar(value=str(int(dur // 3600)))
+        min_var = tk.StringVar(value=str(int((dur % 3600) // 60)))
+        tk.Entry(dur_f, textvariable=hr_var, width=4, font=(self.FONT, 12),
+                 relief="flat", bg="#FFF8EE", bd=1).pack(side="left", ipady=2)
+        tk.Label(dur_f, text="小时", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 10)).pack(side="left", padx=(1, 6))
+        tk.Entry(dur_f, textvariable=min_var, width=4, font=(self.FONT, 12),
+                 relief="flat", bg="#FFF8EE", bd=1).pack(side="left", ipady=2)
+        tk.Label(dur_f, text="分钟", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 10)).pack(side="left", padx=(1, 0))
+
+        tk.Label(f, text="备注", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11, "bold")).pack(anchor="w")
+        note_t = tk.Text(f, font=(self.FONT, 11), relief="flat", bg="#FFF8EE",
+                         fg=TEXT, bd=1, height=3, highlightthickness=1,
+                         highlightbackground=BORDER, wrap="word", padx=6, pady=4)
+        note_t.pack(fill="x", pady=(2, 10))
+        if item.get("note"):
+            note_t.insert("1.0", item["note"])
+
+        bf = tk.Frame(f, bg=CARD)
+        bf.pack(fill="x", pady=(0, 8))
+
+        def do_save():
+            nm = name_e.get().strip()
+            if not nm:
+                messagebox.showwarning("提示", "请输入事件名称！", parent=pop)
+                return
+            try:
+                h = int(hr_var.get() or 0)
+                m = int(min_var.get() or 0)
+                new_dur = h * 3600 + m * 60
+            except ValueError:
+                messagebox.showwarning("提示", "请输入有效时间！", parent=pop)
+                return
+            note = note_t.get("1.0", "end-1c").strip()
+            focus_edit(item["id"], nm, new_dur, note)
+            pop.destroy()
+            refresh_fn()
+            refresh_pie_fn()
+
+        def do_del():
+            if messagebox.askyesno("确认", f"删除「{item['name']}」的记录？", parent=pop):
+                focus_del(item["id"])
+                pop.destroy()
+                refresh_fn()
+                refresh_pie_fn()
+
+        save_btn = clickable_label(bf, "💾 保存", GREEN, TEXT,
+                                   (self.FONT, 12, "bold"), do_save, 0, 9)
+        save_btn.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        hover_bind(save_btn, GREEN2, GREEN)
+        del_btn = clickable_label(bf, "🗑 删除", "#FFEEEE", URGENT,
+                                  (self.FONT, 12, "bold"), do_del, 0, 9)
+        del_btn.pack(side="left", fill="x", expand=True, padx=(4, 0))
+        hover_bind(del_btn, "#FFD0D0", "#FFEEEE")
+        pop.bind("<Escape>", lambda e: pop.destroy())
+
+    def _start_focus_session(self, parent_win, name, mode, countdown_secs,
+                             refresh_fn, refresh_pie_fn):
+        TIMER_BG = TOOLBAR
+        try:
+            parent_win.grab_release()
+        except Exception:
+            pass
+        timer_win = tk.Toplevel(self.root)
+        timer_win.title("专注中...")
+        timer_win.configure(bg=TIMER_BG)
+        timer_win.resizable(False, False)
+        timer_win.attributes("-topmost", True)
+        self._center(timer_win, 400, 330)
+
+        state = {"running": True, "start_time": time_mod.time(),
+                 "notified": False}
+
+        # Current date/time display
+        clock_var = tk.StringVar()
+        tk.Label(timer_win, textvariable=clock_var, bg=TIMER_BG, fg=TEXTG,
+                 font=(self.FONT, 12)).pack(pady=(20, 8))
+
+        # Event name
+        tk.Label(timer_win, text=f"🎯 {name}", bg=TIMER_BG, fg=TEXT,
+                 font=(self.FONT, 16, "bold")).pack(pady=(0, 12))
+
+        # Timer display
+        timer_var = tk.StringVar(value="00:00:00")
+        timer_lbl = tk.Label(timer_win, textvariable=timer_var, bg=TIMER_BG, fg=TEXT,
+                             font=(self.FONT, 36, "bold"))
+        timer_lbl.pack(pady=(0, 6))
+
+        # Mode label
+        mode_lbl_var = tk.StringVar(value="正计时" if mode == "countup" else "倒计时")
+        tk.Label(timer_win, textvariable=mode_lbl_var, bg=TIMER_BG, fg=TEXTG,
+                 font=(self.FONT, 11)).pack(pady=(0, 16))
+
+        def update_clock():
+            if not state["running"]:
+                return
+            now = datetime.now()
+            clock_var.set(now.strftime("%Y年%m月%d日  %H:%M:%S"))
+            elapsed = time_mod.time() - state["start_time"]
+            if mode == "countup":
+                h = int(elapsed // 3600)
+                m = int((elapsed % 3600) // 60)
+                s = int(elapsed % 60)
+                timer_var.set(f"{h:02d}:{m:02d}:{s:02d}")
+            else:
+                remaining = countdown_secs - elapsed
+                if remaining > 0:
+                    h = int(remaining // 3600)
+                    m = int((remaining % 3600) // 60)
+                    s = int(remaining % 60)
+                    timer_var.set(f"{h:02d}:{m:02d}:{s:02d}")
+                else:
+                    over = elapsed - countdown_secs
+                    h = int(over // 3600)
+                    m = int((over % 3600) // 60)
+                    s = int(over % 60)
+                    timer_var.set(f"+{h:02d}:{m:02d}:{s:02d}")
+                    timer_lbl.configure(fg=URGENT)
+                    mode_lbl_var.set("已超时 · 继续计时中")
+                    if not state["notified"]:
+                        state["notified"] = True
+                        messagebox.showinfo("提示", "到时间啦！",
+                                            parent=timer_win)
+            timer_win.after(500, update_clock)
+
+        def do_end():
+            state["running"] = False
+            elapsed = time_mod.time() - state["start_time"]
+            if messagebox.askyesno("确认", "是否结束本次专注？", parent=timer_win):
+                timer_win.destroy()
+                self._show_focus_result(name, elapsed, refresh_fn, refresh_pie_fn)
+            else:
+                state["running"] = True
+                timer_win.after(500, update_clock)
+
+        end_btn = clickable_label(timer_win, "⏹ 结束专注", PINK2, TEXT,
+                                  (self.FONT, 14, "bold"), do_end, 0, 12)
+        end_btn.pack(fill="x", padx=40)
+        hover_bind(end_btn, PINK3, PINK2)
+
+        timer_win.protocol("WM_DELETE_WINDOW", lambda: None)
+        update_clock()
+
+    def _show_focus_result(self, name, elapsed_secs, refresh_fn, refresh_pie_fn):
+        pop = tk.Toplevel(self.root)
+        pop.title("专注完成")
+        pop.configure(bg=CARD)
+        pop.resizable(False, False)
+        pop.grab_set()
+        self._center(pop, 420, 380)
+
+        hrs = int(elapsed_secs // 3600)
+        mins = int((elapsed_secs % 3600) // 60)
+        secs = int(elapsed_secs % 60)
+        time_str = ""
+        if hrs: time_str += f"{hrs}小时"
+        if mins: time_str += f"{mins}分钟"
+        if secs and not hrs: time_str += f"{secs}秒"
+        if not time_str: time_str = "0秒"
+
+        tk.Label(pop, text="🎉 专注完成！", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 18, "bold")).pack(pady=(20, 8))
+        tk.Label(pop, text=f"本次专注用时：{time_str}", bg=CARD, fg=BLUE2,
+                 font=(self.FONT, 14, "bold")).pack(pady=(0, 12))
+
+        f = tk.Frame(pop, bg=CARD, padx=24)
+        f.pack(fill="x")
+
+        tk.Label(f, text="备注（可选）", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 12, "bold")).pack(anchor="w")
+        note_t = tk.Text(f, font=(self.FONT, 12), relief="flat", bg="#FFF8EE",
+                         fg=TEXT, bd=1, height=3, highlightthickness=1,
+                         highlightbackground=BORDER, wrap="word", padx=6, pady=4)
+        note_t.pack(fill="x", pady=(3, 8))
+
+        # Edit time
+        tk.Label(f, text="编辑时间", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 12, "bold")).pack(anchor="w")
+        edit_f = tk.Frame(f, bg=CARD)
+        edit_f.pack(fill="x", pady=(2, 12))
+        edit_hr = tk.StringVar(value=str(hrs))
+        edit_min = tk.StringVar(value=str(mins))
+        edit_sec = tk.StringVar(value=str(secs))
+        tk.Entry(edit_f, textvariable=edit_hr, width=4, font=(self.FONT, 12),
+                 relief="flat", bg="#FFF8EE", bd=1).pack(side="left", ipady=2)
+        tk.Label(edit_f, text="时", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 10)).pack(side="left", padx=(1, 4))
+        tk.Entry(edit_f, textvariable=edit_min, width=4, font=(self.FONT, 12),
+                 relief="flat", bg="#FFF8EE", bd=1).pack(side="left", ipady=2)
+        tk.Label(edit_f, text="分", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 10)).pack(side="left", padx=(1, 4))
+        tk.Entry(edit_f, textvariable=edit_sec, width=4, font=(self.FONT, 12),
+                 relief="flat", bg="#FFF8EE", bd=1).pack(side="left", ipady=2)
+        tk.Label(edit_f, text="秒", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 10)).pack(side="left", padx=(1, 0))
+
+        def do_confirm():
+            try:
+                h = int(edit_hr.get() or 0)
+                m = int(edit_min.get() or 0)
+                s = int(edit_sec.get() or 0)
+                final_dur = h * 3600 + m * 60 + s
+            except ValueError:
+                messagebox.showwarning("提示", "请输入有效时间！", parent=pop)
+                return
+            note = note_t.get("1.0", "end-1c").strip()
+            focus_add(name, final_dur, today_key(), note)
+            pop.destroy()
+            refresh_fn()
+            refresh_pie_fn()
+
+        confirm_btn = clickable_label(f, "✓ 确认保存", GREEN, TEXT,
+                                      (self.FONT, 13, "bold"), do_confirm, 0, 10)
+        confirm_btn.pack(fill="x")
+        hover_bind(confirm_btn, GREEN2, GREEN)
+        pop.bind("<Escape>", lambda e: pop.destroy())
+
 
 
 # ================================================================
