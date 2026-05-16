@@ -949,6 +949,10 @@ class App:
             task_toggle(k, tid), self._render_todo(),
             self._render_cal(), self._render_date_display()
         ))
+        # badge (pack before content so it gets space first)
+        badge_bg = PRIO_BADGE[pri]
+        tk.Label(inner, text=PRIO_LABEL[pri], bg=badge_bg, fg=bc,
+                 font=(self.FONT, 10, "bold"), padx=5, pady=1).pack(side="right", padx=(6, 4))
         # content
         cont = tk.Frame(inner, bg=ibg); cont.pack(side="left", fill="both", expand=True, pady=5)
         name_font = (self.FONT, 13) if task.get("done") else (self.FONT, 13, "bold")
@@ -956,15 +960,11 @@ class App:
                              fg=TEXTG if task.get("done") else TEXT,
                              font=name_font, anchor="w")
         name_lbl.pack(anchor="w")
-        # badge
-        badge_bg = PRIO_BADGE[pri]
-        tk.Label(inner, text=PRIO_LABEL[pri], bg=badge_bg, fg=bc,
-                 font=(self.FONT, 10, "bold"), padx=5, pady=1).pack(side="left", padx=4)
         if task.get("desc"):
             desc_lbl = tk.Label(cont, text=task["desc"], bg=ibg, fg=TEXTG,
                      font=(self.FONT, 11), anchor="w", justify="left")
             desc_lbl.pack(fill="x", anchor="w")
-            desc_lbl.bind("<Configure>", lambda e, l=desc_lbl: l.config(wraplength=max(1, e.width - 4)))
+            desc_lbl.bind("<Configure>", lambda e, l=desc_lbl: l.config(wraplength=max(1, e.width - 20)))
         # double-click on row/content → edit popup
         def on_dbl(e, k=date_key, t=task):
             self._open_task_edit(k, t)
@@ -3410,6 +3410,7 @@ class App:
         win.configure(bg=BG)
         win.resizable(True, True)
         win.grab_set()
+        win.option_add('*TCombobox*Listbox.font', (self.FONT, 11))
         self._center(win, 1000, 700)
 
         tk.Label(win, text="🎯 专注计时", bg=BG, fg=TEXT,
@@ -3425,48 +3426,78 @@ class App:
         left_card = RCard(main, r=16, bg=CARD)
         left_card.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         left_card.inner.columnconfigure(0, weight=1)
-        left_card.inner.rowconfigure(2, weight=1)
 
         tk.Label(left_card.inner, text="📋 历史记录", bg=CARD, fg=TEXT,
                  font=(self.FONT, 14, "bold")).grid(row=0, column=0, sticky="w",
-                                                     padx=12, pady=(10, 2))
+                                                     padx=12, pady=(10, 0))
 
-        # Search + date filter (compact single row)
+        # Search row
         filter_f = tk.Frame(left_card.inner, bg=CARD)
-        filter_f.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 4))
+        filter_f.grid(row=1, column=0, sticky="ew", padx=12, pady=(7, 0))
         search_var = tk.StringVar()
         tk.Label(filter_f, text="🔍", bg=CARD, fg=TEXTG,
-                 font=(self.FONT, 10)).pack(side="left")
-        search_e = tk.Entry(filter_f, textvariable=search_var, font=(self.FONT, 10),
+                 font=(self.FONT, 11)).pack(side="left")
+        search_e = tk.Entry(filter_f, textvariable=search_var, font=(self.FONT, 11),
                             relief="flat", bg="#FFF8EE", fg=TEXT, bd=1, width=12,
                             highlightthickness=1, highlightbackground=BORDER)
-        search_e.pack(side="left", fill="x", expand=True, ipady=2, padx=(2, 6))
-        date_var = tk.StringVar()
-        tk.Label(filter_f, text="📅", bg=CARD, fg=TEXTG,
-                 font=(self.FONT, 10)).pack(side="left")
-        date_e = tk.Entry(filter_f, textvariable=date_var, font=(self.FONT, 10),
-                          relief="flat", bg="#FFF8EE", fg=TEXT, bd=1, width=10,
-                          highlightthickness=1, highlightbackground=BORDER)
-        date_e.pack(side="left", ipady=2, padx=(2, 0))
+        search_e.pack(side="left", fill="x", expand=True, padx=(2, 0))
 
-        left_card.inner.rowconfigure(2, weight=1)
+        # Date filter row
+        date_f = tk.Frame(left_card.inner, bg=CARD)
+        date_f.grid(row=2, column=0, sticky="new", padx=12, pady=(7, 0))
+        tk.Label(date_f, text="📅", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11)).pack(side="left")
+        yr_var = tk.StringVar()
+        yr_e = tk.Entry(date_f, textvariable=yr_var, font=(self.FONT, 11),
+                        relief="flat", bg="#FFF8EE", fg=TEXT, bd=1, width=5,
+                        highlightthickness=1, highlightbackground=BORDER)
+        yr_e.pack(side="left", padx=(2, 0))
+        tk.Label(date_f, text="年", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11)).pack(side="left", padx=(1, 4))
+        mo_var = tk.StringVar(value="全部")
+        mo_cb = ttk.Combobox(date_f, textvariable=mo_var, font=(self.FONT, 11),
+                             state="readonly", width=4,
+                             values=["全部"] + [str(m) for m in range(1, 13)])
+        mo_cb.pack(side="left")
+        tk.Label(date_f, text="月", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11)).pack(side="left", padx=(1, 4))
+        dy_var = tk.StringVar(value="全部")
+        dy_cb = ttk.Combobox(date_f, textvariable=dy_var, font=(self.FONT, 11),
+                             state="readonly", width=4,
+                             values=["全部"] + [str(d) for d in range(1, 32)])
+        dy_cb.pack(side="left")
+        tk.Label(date_f, text="日", bg=CARD, fg=TEXTG,
+                 font=(self.FONT, 11)).pack(side="left", padx=(1, 0))
+
+        left_card.inner.rowconfigure(3, weight=1)
         list_scroll = ScrollFrame(left_card.inner, bg=CARD)
-        list_scroll.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 8))
+        list_scroll.grid(row=3, column=0, sticky="nsew", padx=6, pady=(7, 8))
         list_frame = list_scroll.inner
 
         def refresh_history():
             for w in list_frame.winfo_children(): w.destroy()
             query = search_var.get().strip()
-            dt_filter = date_var.get().strip()
+            y = yr_var.get().strip()
+            m = mo_var.get().strip()
+            d = dy_var.get().strip()
+            if m == "全部": m = ""
+            if d == "全部": d = ""
+            has_filter = bool(query or y or m or d)
             all_sessions = focus_all()
-            has_filter = bool(query or dt_filter)
             if has_filter:
                 filtered = all_sessions
                 if query:
                     filtered = [s for s in filtered
                                 if query.lower() in s["name"].lower()]
-                if dt_filter:
-                    filtered = [s for s in filtered if s["date"] == dt_filter]
+                if y or m or d:
+                    def _match(s):
+                        parts = s["date"].split("-")
+                        if len(parts) != 3: return False
+                        if y and parts[0] != y: return False
+                        if m and int(parts[1]) != int(m): return False
+                        if d and int(parts[2]) != int(d): return False
+                        return True
+                    filtered = [s for s in filtered if _match(s)]
             else:
                 filtered = all_sessions
             filtered.sort(key=lambda x: x["date"], reverse=True)
@@ -3501,7 +3532,9 @@ class App:
                     widget.bind("<Double-Button-1>", on_dbl)
 
         search_var.trace("w", lambda *_: refresh_history())
-        date_var.trace("w", lambda *_: refresh_history())
+        yr_var.trace("w", lambda *_: refresh_history())
+        mo_cb.bind("<<ComboboxSelected>>", lambda *_: refresh_history())
+        dy_cb.bind("<<ComboboxSelected>>", lambda *_: refresh_history())
 
         # ── Right Panel (Timer Setup + Pie Chart) ──
         right_card = RCard(main, r=16, bg=CARD)
@@ -3735,32 +3768,61 @@ class App:
         timer_win = tk.Toplevel(self.root)
         timer_win.title("专注中...")
         timer_win.configure(bg=TIMER_BG)
-        timer_win.resizable(False, False)
+        timer_win.resizable(True, True)
         timer_win.attributes("-topmost", True)
-        self._center(timer_win, 400, 330)
+
+        NORMAL_W, NORMAL_H = 400, 330
+        SMALL_FONTS = {"clock": 12, "name": 16, "timer": 36, "mode": 11, "btn": 14}
+        BIG_FONTS   = {"clock": 25, "name": 33, "timer": 110, "mode": 21, "btn": 25}
 
         state = {"running": True, "start_time": time_mod.time(),
-                 "notified": False}
+                 "notified": False, "maximized": False}
 
-        # Current date/time display
+        content = tk.Frame(timer_win, bg=TIMER_BG)
+        content.pack(expand=True)
+
         clock_var = tk.StringVar()
-        tk.Label(timer_win, textvariable=clock_var, bg=TIMER_BG, fg=TEXTG,
-                 font=(self.FONT, 12)).pack(pady=(20, 8))
+        clock_lbl = tk.Label(content, textvariable=clock_var, bg=TIMER_BG, fg=TEXTG,
+                             font=(self.FONT, SMALL_FONTS["clock"]))
+        clock_lbl.pack(pady=(20, 8))
 
-        # Event name
-        tk.Label(timer_win, text=f"🎯 {name}", bg=TIMER_BG, fg=TEXT,
-                 font=(self.FONT, 16, "bold")).pack(pady=(0, 12))
+        name_lbl = tk.Label(content, text=f"🎯 {name}", bg=TIMER_BG, fg=TEXT,
+                            font=(self.FONT, SMALL_FONTS["name"], "bold"))
+        name_lbl.pack(pady=(0, 12))
 
-        # Timer display
         timer_var = tk.StringVar(value="00:00:00")
-        timer_lbl = tk.Label(timer_win, textvariable=timer_var, bg=TIMER_BG, fg=TEXT,
-                             font=(self.FONT, 36, "bold"))
+        timer_lbl = tk.Label(content, textvariable=timer_var, bg=TIMER_BG, fg=TEXT,
+                             font=(self.FONT, SMALL_FONTS["timer"], "bold"))
         timer_lbl.pack(pady=(0, 6))
 
-        # Mode label
         mode_lbl_var = tk.StringVar(value="正计时" if mode == "countup" else "倒计时")
-        tk.Label(timer_win, textvariable=mode_lbl_var, bg=TIMER_BG, fg=TEXTG,
-                 font=(self.FONT, 11)).pack(pady=(0, 16))
+        mode_lbl = tk.Label(content, textvariable=mode_lbl_var, bg=TIMER_BG, fg=TEXTG,
+                            font=(self.FONT, SMALL_FONTS["mode"]))
+        mode_lbl.pack(pady=(0, 16))
+
+        end_btn = clickable_label(content, "⏹ 结束专注", PINK2, TEXT,
+                                  (self.FONT, SMALL_FONTS["btn"], "bold"),
+                                  lambda: None, 0, 12)
+        end_btn.pack(fill="x", padx=40)
+        hover_bind(end_btn, PINK3, PINK2)
+
+        self._center(timer_win, NORMAL_W, NORMAL_H)
+
+        def _apply_fonts(fonts, big):
+            clock_lbl.configure(font=(self.FONT, fonts["clock"]))
+            name_lbl.configure(font=(self.FONT, fonts["name"], "bold"))
+            timer_lbl.configure(font=(self.FONT, fonts["timer"], "bold"))
+            mode_lbl.configure(font=(self.FONT, fonts["mode"]))
+            end_btn.configure(font=(self.FONT, fonts["btn"], "bold"))
+            content.pack_configure(pady=(0, 76) if big else (0, 0))
+
+        def _on_state_change(event):
+            is_max = timer_win.state() == "zoomed"
+            if is_max != state["maximized"]:
+                state["maximized"] = is_max
+                _apply_fonts(BIG_FONTS if is_max else SMALL_FONTS, is_max)
+
+        timer_win.bind("<Configure>", _on_state_change)
 
         def update_clock():
             if not state["running"]:
@@ -3799,15 +3861,18 @@ class App:
             elapsed = time_mod.time() - state["start_time"]
             if messagebox.askyesno("确认", "是否结束本次专注？", parent=timer_win):
                 timer_win.destroy()
-                self._show_focus_result(name, elapsed, refresh_fn, refresh_pie_fn)
+                if elapsed < 60:
+                    messagebox.showinfo("提示", "时长不足一分钟，不记录本次专注。",
+                                        parent=parent_win)
+                    parent_win.lift()
+                    parent_win.focus_force()
+                else:
+                    self._show_focus_result(name, elapsed, refresh_fn, refresh_pie_fn)
             else:
                 state["running"] = True
                 timer_win.after(500, update_clock)
 
-        end_btn = clickable_label(timer_win, "⏹ 结束专注", PINK2, TEXT,
-                                  (self.FONT, 14, "bold"), do_end, 0, 12)
-        end_btn.pack(fill="x", padx=40)
-        hover_bind(end_btn, PINK3, PINK2)
+        end_btn.bind("<Button-1>", lambda e: do_end())
 
         timer_win.protocol("WM_DELETE_WINDOW", lambda: None)
         update_clock()
