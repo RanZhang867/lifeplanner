@@ -975,7 +975,7 @@ class App:
     def _render_cds(self):
         cd_cleanup()
         for w in self._cd_frame.winfo_children(): w.destroy()
-        cds = _load()["countdowns"]
+        cds = sorted(_load()["countdowns"], key=lambda c: cd_days(c))
         if not cds:
             tk.Label(self._cd_frame, text="暂无倒数日，点击顶部按钮添加~",
                      bg=CARD, fg=TEXTG, font=(self.FONT, 12)).pack(pady=8)
