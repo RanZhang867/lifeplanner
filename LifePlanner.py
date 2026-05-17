@@ -1097,7 +1097,7 @@ class App:
     def _open_task_edit(self, date_key, task):
         win = tk.Toplevel(self.root); win.title("编辑日程")
         win.configure(bg=CARD); win.resizable(False, False); win.grab_set()
-        self._center(win, 420, 480)
+        self._center(win, 450, 540)
         tk.Label(win, text="✏️ 编辑日程", bg=CARD, fg=TEXT,
                  font=(self.FONT, 20, "bold")).pack(pady=(22, 14))
         f = tk.Frame(win, bg=CARD, padx=26); f.pack(fill="x")
@@ -1158,7 +1158,7 @@ class App:
     def _open_cd_edit(self, c):
         win = tk.Toplevel(self.root); win.title("编辑倒数日")
         win.configure(bg=CARD); win.resizable(False, False); win.grab_set()
-        self._center(win, 420, 400)
+        self._center(win, 450, 460)
         tk.Label(win, text="✏️ 编辑倒数日", bg=CARD, fg=TEXT,
                  font=(self.FONT, 20, "bold")).pack(pady=(22, 14))
         f = tk.Frame(win, bg=CARD, padx=26); f.pack(fill="x")
@@ -1231,7 +1231,7 @@ class App:
         pop.title("编辑体重记录")
         pop.configure(bg=CARD)
         pop.resizable(False, False)
-        self._center(pop, 300, 190)
+        self._center(pop, 340, 230)
         pop.grab_set()
 
         tk.Label(pop, text=f"📅 {fmt_cn(entry['date'])}", bg=CARD, fg=TEXT,
@@ -1270,7 +1270,7 @@ class App:
         pop = tk.Toplevel(self.root)
         pop.title(""); pop.configure(bg=CARD)
         pop.resizable(False, False)
-        self._center(pop, 260, 150)
+        self._center(pop, 300, 180)
         pop.grab_set()
 
         tk.Label(pop, text="跳转到年月", bg=CARD, fg=TEXT,
@@ -1360,7 +1360,7 @@ class App:
     def _open_add_task(self):
         win = tk.Toplevel(self.root); win.title("添加日程")
         win.configure(bg=CARD); win.resizable(False, False); win.grab_set()
-        self._center(win, 420, 540)
+        self._center(win, 450, 600)
         tk.Label(win, text="✏️ 添加日程", bg=CARD, fg=TEXT,
                  font=(self.FONT, 20, "bold")).pack(pady=(22, 14))
         f = tk.Frame(win, bg=CARD, padx=26); f.pack(fill="x")
@@ -1426,7 +1426,7 @@ class App:
     def _open_add_cd(self):
         win = tk.Toplevel(self.root); win.title("添加倒数日")
         win.configure(bg=CARD); win.resizable(False, False); win.grab_set()
-        self._center(win, 420, 380)
+        self._center(win, 450, 440)
         tk.Label(win, text="⏰ 添加倒数日", bg=CARD, fg=TEXT,
                  font=(self.FONT, 20, "bold")).pack(pady=(22, 14))
         f = tk.Frame(win, bg=CARD, padx=26); f.pack(fill="x")
@@ -1481,7 +1481,7 @@ class App:
     def _open_summary(self, init_type):
         win = tk.Toplevel(self.root); win.title("总结")
         win.configure(bg=CARD); win.resizable(True, True); win.grab_set()
-        self._center(win, 700, 860)
+        self._center(win, 700, 960)
         tk.Label(win, text="✨ 总 结", bg=CARD, fg=TEXT,
                  font=(self.FONT, 20, "bold")).pack(pady=(22, 14))
 
@@ -1805,7 +1805,7 @@ class App:
     def _open_thought_edit(self, item, refresh_fn):
         pop = tk.Toplevel(self.root); pop.title("编辑")
         pop.configure(bg=CARD); pop.resizable(False, False); pop.grab_set()
-        self._center(pop, 440, 420)
+        self._center(pop, 480, 480)
 
         tk.Label(pop, text="✏️ 编辑计划", bg=CARD, fg=TEXT,
                  font=(self.FONT, 16, "bold")).pack(pady=(18, 4))
@@ -2122,7 +2122,7 @@ class App:
         pop.title("编辑记录")
         pop.configure(bg=CARD); pop.resizable(False, False); pop.grab_set()
         pop.option_add('*TCombobox*Listbox.font', (self.FONT, 12))
-        self._center(pop, 380, 460)
+        self._center(pop, 420, 520)
 
         tk.Label(pop, text="✏️ 编辑记录", bg=CARD, fg=TEXT,
                  font=(self.FONT, 16, "bold")).pack(pady=(16, 8))
@@ -2201,7 +2201,7 @@ class App:
         win = tk.Toplevel(parent)
         win.title("导出记账记录"); win.configure(bg=CARD)
         win.resizable(False, False); win.grab_set()
-        self._center(win, 300, 340)
+        self._center(win, 340, 380)
 
         tk.Label(win, text="📤 导出记账记录", bg=CARD, fg=TEXT,
                  font=(self.FONT, 15, "bold")).pack(pady=(18, 12))
@@ -2238,7 +2238,7 @@ class App:
         win.title("年导出"); win.configure(bg=CARD)
         win.resizable(False, False); win.grab_set()
         win.option_add('*TCombobox*Listbox.font', (self.FONT, 13))
-        self._center(win, 280, 200)
+        self._center(win, 320, 240)
         tk.Label(win, text="选择年份", bg=CARD, fg=TEXT,
                  font=(self.FONT, 14, "bold")).pack(pady=(18, 8))
         var = tk.StringVar(value=str(years[-1]))
@@ -2265,7 +2265,7 @@ class App:
         win.title("月导出"); win.configure(bg=CARD)
         win.resizable(False, False); win.grab_set()
         win.option_add('*TCombobox*Listbox.font', (self.FONT, 13))
-        self._center(win, 300, 220)
+        self._center(win, 340, 260)
         tk.Label(win, text="选择月份", bg=CARD, fg=TEXT,
                  font=(self.FONT, 14, "bold")).pack(pady=(18, 8))
         row = tk.Frame(win, bg=CARD); row.pack()
@@ -2294,7 +2294,7 @@ class App:
         win = tk.Toplevel(export_win)
         win.title("随机日期导出"); win.configure(bg=CARD)
         win.resizable(False, False); win.grab_set()
-        self._center(win, 340, 260)
+        self._center(win, 380, 300)
         tk.Label(win, text="选择日期范围", bg=CARD, fg=TEXT,
                  font=(self.FONT, 14, "bold")).pack(pady=(18, 8))
         f = tk.Frame(win, bg=CARD, padx=20); f.pack(fill="x")
@@ -2527,7 +2527,7 @@ class App:
         win.configure(bg=CARD)
         win.resizable(False, False)
         win.grab_set()
-        self._center(win, 300, 360)
+        self._center(win, 340, 400)
         win.bind("<Escape>", lambda e: win.destroy())
 
         tk.Label(win, text="📤 导出记录", bg=CARD, fg=TEXT,
@@ -2585,7 +2585,7 @@ class App:
         win.configure(bg=CARD)
         win.resizable(False, False)
         win.grab_set()
-        self._center(win, 280, 200)
+        self._center(win, 320, 240)
         win.bind("<Escape>", lambda e: win.destroy())
 
         tk.Label(win, text="选择导出年份", bg=CARD, fg=TEXT,
@@ -2623,7 +2623,7 @@ class App:
         win.configure(bg=CARD)
         win.resizable(False, False)
         win.grab_set()
-        self._center(win, 300, 210)
+        self._center(win, 340, 250)
         win.bind("<Escape>", lambda e: win.destroy())
 
         tk.Label(win, text="选择导出月份", bg=CARD, fg=TEXT,
@@ -2673,7 +2673,7 @@ class App:
         win.configure(bg=CARD)
         win.resizable(False, False)
         win.grab_set()
-        self._center(win, 310, 210)
+        self._center(win, 350, 250)
         win.bind("<Escape>", lambda e: win.destroy())
 
         tk.Label(win, text="选择导出周", bg=CARD, fg=TEXT,
@@ -2732,7 +2732,7 @@ class App:
         win.configure(bg=CARD)
         win.resizable(False, False)
         win.grab_set()
-        self._center(win, 370, 295)
+        self._center(win, 410, 350)
         win.bind("<Escape>", lambda e: win.destroy())
 
         tk.Label(win, text="✏ 自由导出", bg=CARD, fg=TEXT,
@@ -3680,7 +3680,7 @@ class App:
         pop.configure(bg=CARD)
         pop.resizable(False, False)
         pop.grab_set()
-        self._center(pop, 400, 360)
+        self._center(pop, 440, 420)
 
         tk.Label(pop, text="✏️ 编辑专注记录", bg=CARD, fg=TEXT,
                  font=(self.FONT, 16, "bold")).pack(pady=(16, 10))
@@ -3771,7 +3771,7 @@ class App:
         timer_win.resizable(True, True)
         timer_win.attributes("-topmost", True)
 
-        NORMAL_W, NORMAL_H = 400, 330
+        NORMAL_W, NORMAL_H = 440, 370
         SMALL_FONTS = {"clock": 12, "name": 16, "timer": 36, "mode": 11, "btn": 14}
         BIG_FONTS   = {"clock": 25, "name": 33, "timer": 110, "mode": 21, "btn": 25}
 
@@ -3883,7 +3883,7 @@ class App:
         pop.configure(bg=CARD)
         pop.resizable(False, False)
         pop.grab_set()
-        self._center(pop, 420, 380)
+        self._center(pop, 460, 440)
 
         hrs = int(elapsed_secs // 3600)
         mins = int((elapsed_secs % 3600) // 60)
