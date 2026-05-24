@@ -243,14 +243,15 @@ def finance_for_month(year, month):
     return [f for f in _load()["finance"] if f["date"].startswith(prefix)]
 
 # ─── WEIGHT ──────────────────────────────────────────────────────
-def weight_add(w, ws):
+def weight_add(w, ws, we=None):
     d = _load(); key = today_key()
     idx = next((i for i, e in enumerate(d["weight"]) if e["date"] == key), -1)
     if idx >= 0:
         if w is not None:  d["weight"][idx]["w"]  = w
         if ws is not None: d["weight"][idx]["ws"] = ws
+        if we is not None: d["weight"][idx]["we"] = we
     else:
-        d["weight"].append({"date": key, "w": w, "ws": ws})
+        d["weight"].append({"date": key, "w": w, "ws": ws, "we": we})
     d["weight"].sort(key=lambda e: e["date"]); _save(d)
 
 def weight_del(date_key):
@@ -258,12 +259,13 @@ def weight_del(date_key):
     d["weight"] = [e for e in d["weight"] if e["date"] != date_key]
     _save(d)
 
-def weight_update(date_key, w, ws):
+def weight_update(date_key, w, ws, we=None):
     d = _load()
     idx = next((i for i, e in enumerate(d["weight"]) if e["date"] == date_key), -1)
     if idx >= 0:
         if w is not None: d["weight"][idx]["w"] = w
         if ws is not None: d["weight"][idx]["ws"] = ws
+        if we is not None: d["weight"][idx]["we"] = we
     _save(d)
 
 def weight_latest():
@@ -275,7 +277,8 @@ def weight_for_week(monday):
         key = dk(monday + timedelta(i))
         e = next((x for x in d["weight"] if x["date"] == key), None)
         res.append({"w": e["w"] if e and "w" in e else None,
-                    "ws": e["ws"] if e and "ws" in e else None})
+                    "ws": e["ws"] if e and "ws" in e else None,
+                    "we": e.get("we") if e else None})
     return res
 
 def weight_for_month(year, month):
@@ -291,12 +294,36 @@ def weight_for_year(year):
     d = _load(); res = []
     mnames = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"]
     for m in range(1, 13):
-        es = [e for e in d["weight"] if e["date"].startswith(f"{year}-{m:02d}")]
-        ws = [e["w"] for e in es if e.get("w") is not None]
-        wss = [e["ws"] for e in es if e.get("ws") is not None]
-        res.append({"label": mnames[m-1],
-                    "w": sum(ws)/len(ws) if ws else None,
-                    "ws": sum(wss)/len(wss) if wss else None})
+        es = sorted([e for e in d["weight"] if e["date"].startswith(f"{year}-{m:02d}")],
+                     key=lambda e: e["date"])
+        last_w = None; last_ws = None
+        for e in reversed(es):
+            if last_w is None and e.get("w") is not None: last_w = e["w"]
+            if last_ws is None and e.get("ws") is not None: last_ws = e["ws"]
+            if last_w is not None and last_ws is not None: break
+        res.append({"label": mnames[m-1], "w": last_w, "ws": last_ws})
+    return res
+
+def weight_for_month_summary(year, month):
+    d = _load(); res = []
+    first = date(year, month, 1)
+    last = date(year, month, cal_mod.monthrange(year, month)[1])
+    mon = monday_of(first); wk = 1
+    while mon <= last:
+        entries = []
+        for i in range(7):
+            day = mon + timedelta(i)
+            if day.year == year and day.month == month:
+                key = dk(day)
+                e = next((x for x in d["weight"] if x["date"] == key), None)
+                if e: entries.append(e)
+        last_w = None; last_ws = None
+        for e in reversed(entries):
+            if last_w is None and e.get("w") is not None: last_w = e["w"]
+            if last_ws is None and e.get("ws") is not None: last_ws = e["ws"]
+            if last_w is not None and last_ws is not None: break
+        res.append({"label": f"第{wk}周", "w": last_w, "ws": last_ws})
+        mon += timedelta(7); wk += 1
     return res
 
 # ─── FOCUS SESSIONS (专注计时) ────────────────────────────────────
@@ -668,6 +695,8 @@ class App:
         self._w_entry.pack(side="left", padx=(18, 6))
         self._ws_entry = self._num_input(wh, "腰围", "cm")
         self._ws_entry.pack(side="left", padx=(0, 6))
+        self._we_entry = self._num_input(wh, "睡前", "kg")
+        self._we_entry.pack(side="left", padx=(0, 6))
         add_btn = clickable_label(wh, "+ 记录", GREEN, TEXT,
                                    (self.FONT, 11, "bold"), self._do_add_weight, 8, 4)
         add_btn.pack(side="left")
@@ -1023,7 +1052,11 @@ class App:
         self._ws_clbl.configure(text=f"本周腰围 (cm)  {mon.month}/{mon.day}—{sun.month}/{sun.day}")
         wd = weight_for_week(mon)
         lbls = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-        self._draw_chart(self._wt_cvs, lbls, [d["w"]  for d in wd], "#FF9F7F")
+        we_vals = [d["we"] for d in wd]
+        has_evening = any(v is not None for v in we_vals)
+        self._draw_chart(self._wt_cvs, lbls, [d["w"]  for d in wd], "#FF9F7F",
+                         values2=we_vals if has_evening else None,
+                         color2="#5B9BD5" if has_evening else None)
         self._draw_chart(self._ws_cvs, lbls, [d["ws"] for d in wd], "#74B9FF")
         self._wt_week_mon = mon
         self._wt_cvs.bind("<Button-1>", lambda e: self._on_chart_click(e))
@@ -1043,17 +1076,69 @@ class App:
     def _do_add_weight(self):
         wv  = self._w_entry._entry.get().strip()
         wsv = self._ws_entry._entry.get().strip()
-        if not wv and not wsv:
-            messagebox.showwarning("提示", "请输入体重或腰围！"); return
+        wev = self._we_entry._entry.get().strip()
+        if not wv and not wsv and not wev:
+            messagebox.showwarning("提示", "请输入体重、腰围或睡前体重！"); return
         try:
             w  = float(wv)  if wv  else None
             ws = float(wsv) if wsv else None
+            we = float(wev) if wev else None
         except ValueError:
             messagebox.showwarning("提示", "请输入有效数字！"); return
-        weight_add(w, ws)
+        weight_add(w, ws, we)
         self._w_entry._entry.delete(0, "end")
         self._ws_entry._entry.delete(0, "end")
+        self._we_entry._entry.delete(0, "end")
         self._render_weight()
+        if we is not None:
+            today_entry = next((e for e in _load()["weight"] if e["date"] == today_key()), None)
+            morning = today_entry.get("w") if today_entry else None
+            if morning is not None:
+                self._show_weight_feedback(we - morning)
+
+    def _show_weight_feedback(self, diff):
+        pop = tk.Toplevel(self.root)
+        pop.title("体重反馈")
+        pop.configure(bg=CARD)
+        pop.resizable(False, False)
+        self._center(pop, 440, 220)
+        pop.grab_set()
+
+        tk.Label(pop, text="⚖️ 体重反馈", bg=CARD, fg=TEXT,
+                 font=(self.FONT, 16, "bold")).pack(pady=(18, 12))
+
+        msg_frame = tk.Frame(pop, bg=CARD, padx=24)
+        msg_frame.pack(fill="x")
+
+        txt = tk.Text(msg_frame, bg=CARD, fg=TEXT, font=(self.FONT, 13),
+                      relief="flat", bd=0, height=3, wrap="word",
+                      highlightthickness=0)
+        txt.pack(fill="x")
+        txt.tag_configure("rb", foreground="red", font=(self.FONT, 13, "bold"))
+
+        if diff <= 0:
+            txt.insert("end", "今天请")
+            txt.insert("end", "增加蛋白质", "rb")
+            txt.insert("end", "的摄入，防止出现平台期。")
+        elif diff <= 0.5:
+            txt.insert("end", "状态良好，会持续掉秤，")
+            txt.insert("end", "请继续保持", "rb")
+            txt.insert("end", "。")
+        elif diff <= 1.0:
+            txt.insert("end", "如果不是吃太多，那就是吃太咸，")
+            txt.insert("end", "请控制住！", "rb")
+        else:
+            txt.insert("end", "晚上要增加运动，不要再吃了。第二天")
+            txt.insert("end", "要控制饮食！", "rb")
+
+        txt.configure(state="disabled")
+
+        ok_btn = clickable_label(pop, "好的", ACCENT, TEXT,
+                                 (self.FONT, 12, "bold"), pop.destroy, 20, 8)
+        ok_btn.pack(pady=(12, 16))
+        hover_bind(ok_btn, ACCENT2, ACCENT)
+        pop.bind("<Escape>", lambda e: pop.destroy())
+        pop.bind("<Return>", lambda e: pop.destroy())
 
     # ──────────────────────────────────────────────────────────────
     # DRAG-TO-REORDER
@@ -1231,7 +1316,7 @@ class App:
         pop.title("编辑体重记录")
         pop.configure(bg=CARD)
         pop.resizable(False, False)
-        self._center(pop, 340, 230)
+        self._center(pop, 460, 230)
         pop.grab_set()
 
         tk.Label(pop, text=f"📅 {fmt_cn(entry['date'])}", bg=CARD, fg=TEXT,
@@ -1239,18 +1324,22 @@ class App:
 
         ef = tk.Frame(pop, bg=CARD); ef.pack(pady=(0, 12))
         w_ent  = self._num_input(ef, "体重", "kg"); w_ent.pack(side="left", padx=(0, 8))
-        ws_ent = self._num_input(ef, "腰围", "cm"); ws_ent.pack(side="left")
+        ws_ent = self._num_input(ef, "腰围", "cm"); ws_ent.pack(side="left", padx=(0, 8))
+        we_ent = self._num_input(ef, "睡前", "kg"); we_ent.pack(side="left")
         if entry.get("w")  is not None: w_ent._entry.insert(0, str(entry["w"]))
         if entry.get("ws") is not None: ws_ent._entry.insert(0, str(entry["ws"]))
+        if entry.get("we") is not None: we_ent._entry.insert(0, str(entry["we"]))
 
         def do_save():
             wv = w_ent._entry.get().strip(); wsv = ws_ent._entry.get().strip()
+            wev = we_ent._entry.get().strip()
             try:
                 w  = float(wv)  if wv  else None
                 ws = float(wsv) if wsv else None
+                we = float(wev) if wev else None
             except ValueError:
                 messagebox.showwarning("提示", "请输入有效数字！"); return
-            weight_update(entry["date"], w, ws)
+            weight_update(entry["date"], w, ws, we)
             self._render_weight(); pop.destroy()
 
         def do_del():
@@ -1307,7 +1396,7 @@ class App:
         hover_bind(btn, ACCENT2, ACCENT)
         y_entry.bind("<Return>", lambda e: go())
 
-    def _draw_chart(self, canvas, labels, values, color):
+    def _draw_chart(self, canvas, labels, values, color, values2=None, color2=None):
         canvas.delete("all"); canvas.update_idletasks()
         W = canvas.winfo_width(); H = canvas.winfo_height()
         if W <= 1: W = 260
@@ -1315,6 +1404,8 @@ class App:
         cW = W - pL - pR; cH = H - pT - pB
         canvas.create_rectangle(0, 0, W, H, fill="#FFF8EE", outline="")
         nv = [v for v in values if v is not None]
+        if values2:
+            nv += [v for v in values2 if v is not None]
         if not nv:
             canvas.create_text(W // 2, H // 2, text="暂无数据", fill=TEXTG,
                                font=(self.FONT, 11)); return {}
@@ -1334,23 +1425,35 @@ class App:
             canvas.create_text(pL - 4, pT + cH - (i / 2) * cH,
                                text=f"{v:.1f}", fill=TEXTG, font=(self.FONT, 9), anchor="e")
 
-        segs = []; cur = []
-        for i, v in enumerate(values):
-            if v is not None: cur.append((tx(i), ty(v)))
-            else:
-                if cur: segs.append(cur); cur = []
-        if cur: segs.append(cur)
-        for seg in segs:
-            if len(seg) > 1:
-                pts = [coord for pt in seg for coord in pt]
-                canvas.create_line(pts, fill=color, width=2.5, smooth=False,
-                                   capstyle="round", joinstyle="round")
-        for i, v in enumerate(values):
-            if v is None: continue
-            x, y = tx(i), ty(v)
-            canvas.create_oval(x-4, y-4, x+4, y+4, fill=color, outline="")
-            canvas.create_oval(x-2, y-2, x+2, y+2, fill="white", outline="")
-            canvas.create_text(x, y - 9, text=f"{v:.1f}", fill=color, font=(self.FONT, 9))
+        def _draw_series(vals, clr, offset_y=0):
+            segs = []; cur = []
+            for i, v in enumerate(vals):
+                if v is not None: cur.append((tx(i), ty(v)))
+                else:
+                    if cur: segs.append(cur); cur = []
+            if cur: segs.append(cur)
+            for seg in segs:
+                if len(seg) > 1:
+                    pts = [coord for pt in seg for coord in pt]
+                    canvas.create_line(pts, fill=clr, width=2.5, smooth=False,
+                                       capstyle="round", joinstyle="round")
+            for i, v in enumerate(vals):
+                if v is None: continue
+                x, y = tx(i), ty(v)
+                canvas.create_oval(x-4, y-4, x+4, y+4, fill=clr, outline="")
+                canvas.create_oval(x-2, y-2, x+2, y+2, fill="white", outline="")
+                canvas.create_text(x, y - 9 + offset_y, text=f"{v:.1f}", fill=clr, font=(self.FONT, 9))
+
+        _draw_series(values, color)
+        if values2 and color2:
+            _draw_series(values2, color2, offset_y=12)
+            lx = pL + cW - 110
+            canvas.create_rectangle(lx, 3, lx+10, 11, fill=color, outline="")
+            canvas.create_text(lx+14, 7, text="早上", fill=TEXTG, font=(self.FONT, 8), anchor="w")
+            lx2 = lx + 50
+            canvas.create_rectangle(lx2, 3, lx2+10, 11, fill=color2, outline="")
+            canvas.create_text(lx2+14, 7, text="睡前", fill=TEXTG, font=(self.FONT, 8), anchor="w")
+
         return {i: (tx(i), ty(v) if v is not None else None)
                 for i, v in enumerate(values)}
 
@@ -1598,7 +1701,7 @@ class App:
                 m = (today.month - 1 + off) % 12 + 1
                 period_v.set(f"{y}年{m}月")
                 sk = f"{y}-{m:02d}-01"; ek = dk(date(y, m, cal_mod.monthrange(y, m)[1]))
-                md   = weight_for_month(y, m)
+                md   = weight_for_month_summary(y, m)
                 lbls = [d["label"] for d in md]
                 wts  = [d["w"]  for d in md]
                 wss  = [d["ws"] for d in md]
@@ -1674,8 +1777,18 @@ class App:
 
         def refresh_list():
             for w in list_frame.winfo_children(): w.destroy()
-            items = sorted(thoughts_by_type(tab_var.get()),
-                           key=lambda x: x["period"], reverse=True)
+            t_type = tab_var.get()
+            today_ = date.today()
+            if t_type == "year":
+                cur_period = str(today_.year)
+            elif t_type == "month":
+                cur_period = f"{today_.year}-{today_.month:02d}"
+            else:
+                iso = today_.isocalendar()
+                cur_period = f"{iso[0]}-W{iso[1]:02d}"
+            items = sorted(
+                [i for i in thoughts_by_type(t_type) if i["period"] >= cur_period],
+                key=lambda x: x["period"], reverse=True)
             if not items:
                 tk.Label(list_frame, text="暂无记录~", bg=CARD, fg=TEXTL,
                          font=(self.FONT, 12)).pack(pady=30)
@@ -3156,11 +3269,15 @@ class App:
                     monthly_ws_avg = []
                     for m in range(1, 13):
                         prefix = f"{year}-{m:02d}"
-                        mes  = [e for e in yr_wt if e["date"].startswith(prefix)]
-                        wv   = [e["w"]  for e in mes if e.get("w")  is not None]
-                        wsv  = [e["ws"] for e in mes if e.get("ws") is not None]
-                        monthly_wt_avg.append(sum(wv)/len(wv)   if wv  else None)
-                        monthly_ws_avg.append(sum(wsv)/len(wsv) if wsv else None)
+                        mes = sorted([e for e in yr_wt if e["date"].startswith(prefix)],
+                                      key=lambda e: e["date"])
+                        lw = None; lws = None
+                        for e in reversed(mes):
+                            if lw is None and e.get("w") is not None: lw = e["w"]
+                            if lws is None and e.get("ws") is not None: lws = e["ws"]
+                            if lw is not None and lws is not None: break
+                        monthly_wt_avg.append(lw)
+                        monthly_ws_avg.append(lws)
                     # Text stats
                     all_wt = [e for e in yr_wt if e.get("w")  is not None]
                     all_ws = [e for e in yr_wt if e.get("ws") is not None]
